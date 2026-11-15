@@ -67,9 +67,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .row .t{font-variant-numeric:tabular-nums}
 .row input{width:96px;min-height:40px}
 .neg{color:var(--block)} .pos{color:var(--pass)}
-nav{position:fixed;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(3,1fr);background:var(--card);border-top:1px solid var(--line);padding:6px 10px calc(6px + env(safe-area-inset-bottom));gap:6px}
+nav{position:fixed;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(4,1fr);background:var(--card);border-top:1px solid var(--line);padding:6px 10px calc(6px + env(safe-area-inset-bottom));gap:6px}
 nav button{border:0;background:transparent;min-height:52px;color:var(--quiet)}
 nav button[aria-selected=true]{background:var(--bg);color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+#answer{white-space:pre-wrap}
 .toast{position:fixed;left:18px;right:18px;bottom:calc(88px + env(safe-area-inset-bottom));background:var(--accent);color:var(--accent-ink);padding:12px 14px;border-radius:12px;display:none;font-weight:600}
 @media (prefers-reduced-motion:no-preference){ #verdict{transition:none} }
 </style>
@@ -138,14 +140,27 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--ink)}
       <button class="small" id="wipe">Delete all data</button>
     </div>
   </section>
+  <section id="tab-ask" aria-label="Ask">
+    <h2>Ask</h2>
+    <div class="card">
+      <label for="q">Ask about your rules, today, or a trading term</label>
+      <input type="text" id="q" autocomplete="off" placeholder="Can I trade now?">
+      <button class="main" id="askGo">Ask</button>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="card" id="answer" style="display:none" role="status"></div>
+    <p class="hint">Answers come from your own rules and journal on this phone. No AI, no internet.</p>
+  </section>
 </main>
 <div class="toast" id="toast" role="status"></div>
 <nav aria-label="Sections">
   <button data-tab="morning" aria-selected="true">Morning</button>
   <button data-tab="check" aria-selected="false">Check</button>
   <button data-tab="journal" aria-selected="false">Journal</button>
+  <button data-tab="ask" aria-selected="false">Ask</button>
 </nav>
 <script src="gatekeeper.js"></script>
+<script src="ask.js"></script>
 <script>
 (function () {
   var G = window.Gatekeeper, KEY = 'gk_v1', RULES = null;
@@ -249,7 +264,7 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--ink)}
     if (res.pass) lastPass = { t: t, risk: res.risk, minutes: now.minutes, date: now.date };
     else {
       lastPass = null;
-      var rec = { date: now.date, minutes: now.minutes, segment: t.segment, paper: t.paper, trade: t, reasons: res.results.filter(function (r) { return !r.ok; }).map(function (r) { return r.reason; }) };
+      var rec = { date: now.date, minutes: now.minutes, segment: t.segment, paper: t.paper, trade: t, ids: res.results.filter(function (r) { return !r.ok; }).map(function (r) { return r.id; }), reasons: res.results.filter(function (r) { return !r.ok; }).map(function (r) { return r.reason; }) };
       var last = S.blocked[S.blocked.length - 1];
       if (!last || JSON.stringify(last.trade) !== JSON.stringify(rec.trade) || last.minutes !== rec.minutes) { S.blocked.push(rec); save(); }
     }
@@ -269,8 +284,8 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--ink)}
   function buildCsv() {
     var rows = ['TRADES', 'date,time,segment,paper,entry,stop,target,qty,risk,pnl'];
     S.trades.forEach(function (t) { rows.push([t.date, G.clock(t.minutes), t.segment, t.paper, t.entry, t.stop, t.target, t.qty, t.risk, t.pnl == null ? '' : t.pnl].join(',')); });
-    rows.push('', 'BLOCKED', 'date,time,segment,reasons');
-    S.blocked.forEach(function (x) { rows.push([x.date, G.clock(x.minutes), x.segment, csvq(x.reasons.join(' | '))].join(',')); });
+    rows.push('', 'BLOCKED', 'date,time,segment,rules,reasons');
+    S.blocked.forEach(function (x) { rows.push([x.date, G.clock(x.minutes), x.segment, (x.ids || []).join(';'), csvq(x.reasons.join(' | '))].join(',')); });
     $('csv').value = rows.join('\n');
   }
 
@@ -293,6 +308,17 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--ink)}
   $('makeCsv').onclick = buildCsv;
   $('copyCsv').onclick = function () { buildCsv(); var c = $('csv'); c.select(); try { (navigator.clipboard ? navigator.clipboard.writeText(c.value) : Promise.reject()).then(function () { toast('Copied.'); }, function () { document.execCommand('copy'); toast('Copied.'); }); } catch (e) { toast('Select the text and copy it.'); } };
   $('wipe').onclick = function () { if (confirm('Delete every trade, blocked trade and morning check on this phone?')) { S = { morning: null, trades: [], blocked: [] }; save(); render(); } };
+
+  function askNow(text) {
+    if (!RULES) return;
+    $('q').value = text;
+    var a = $('answer'); a.style.display = 'block'; a.textContent = window.Ask.answer(text, { rules: RULES, state: S, now: nowIST() }).text;
+  }
+  $('askGo').onclick = function () { askNow($('q').value); };
+  $('q').onkeydown = function (e) { if (e.key === 'Enter') askNow($('q').value); };
+  ['Can I trade now?', 'How much can I risk?', "Today's P&L", 'What are my rules?', 'Why was I blocked?', 'How am I doing?', 'What is VWAP?'].forEach(function (c) {
+    var b = el('button', 'small', c); b.onclick = function () { askNow(c); }; $('chips').appendChild(b);
+  });
 
   fetch('rules.json', { cache: 'no-cache' }).then(function (r) { return r.json(); }).then(function (j) {
     RULES = j; segChange(); render(); setInterval(render, 30000);

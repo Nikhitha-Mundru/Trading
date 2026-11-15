@@ -1,0 +1,9 @@
+TRADES
+date,time,segment,paper,entry,stop,target,qty,risk,pnl
+2026-11-15,10:11,equity,true,100,98,104,50,100,
+
+BLOCKED
+date,time,segment,rules,reasons
+2026-11-15,10:11,equity,morning;risk,"Do the morning check first. | Risk is ₹200; limit is ₹150."
+2026-11-15,10:11,equity,morning,"Do the morning check first."
+2026-11-15,10:11,equity,morning,"Do the morning check first."

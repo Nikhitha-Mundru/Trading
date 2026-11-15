@@ -402,16 +402,18 @@ details summary{cursor:pointer;min-height:40px;display:flex;align-items:center}
     var card = el('div', 'card'), head = el('b', '', 'All SIPs together'), body = el('div'), rows = el('div'), chart = el('div');
     var bench = numInput('7', 'any', 'Fixed yearly return to compare the whole with, in percent');
     card.appendChild(head); card.appendChild(body); card.appendChild(chart);
-    card.appendChild(labelled('Compare with a fixed return (% a year)', bench)); card.appendChild(rows);
+    var benchBox = labelled('Compare with a fixed return (% a year)', bench); card.appendChild(benchBox); card.appendChild(rows);
     var refresh = function () {
       var p = Sip.portfolio(P.sips, P.snapshots, { benchmarkRate: num(bench, 7) / 100 });
-      body.textContent = ''; Sip.portfolioLines(p).forEach(function (l, i) { body.appendChild(el('p', i === 0 ? 'neg' : '', l)); if (i === 0 && p.aheadBy >= 0) body.lastChild.className = 'pos'; });
-      chart.textContent = ''; chart.appendChild(drawGrowth(p));
-      chart.appendChild(el('p', 'hint', 'Grey line: money you put in. Filled dot: value now. Hollow dot: the same payments at the fixed return.'));
+      var partial = p.benchValue === null; // some funds have only a holdings summary
+      body.textContent = ''; Sip.portfolioLines(p).forEach(function (l, i) { body.appendChild(el('p', i === 0 && !partial ? (p.aheadBy >= 0 ? 'pos' : 'neg') : '', l)); });
+      benchBox.style.display = partial ? 'none' : '';
+      chart.textContent = '';
+      if (!partial) { chart.appendChild(drawGrowth(p)); chart.appendChild(el('p', 'hint', 'Grey line: money you put in. Filled dot: value now. Hollow dot: the same payments at the fixed return.')); }
       rows.textContent = '';
       if (p.rows.length > 1) p.rows.forEach(function (r) {
         var d = el('div', 'row'), left = el('div'); left.appendChild(el('b', '', r.name)); left.appendChild(el('div', 'hint', 'Invested ' + Sip.rs(r.invested) + ' of ' + Sip.rs(p.invested) + ', ' + Sip.pct1(r.share) + ' of the value'));
-        d.appendChild(left); d.appendChild(el('span', 't', Sip.rs(r.gain) + pctText(r.pct) + (r.xirr === null ? '' : ', XIRR ' + Sip.pct1(r.xirr * 100)))); rows.appendChild(d);
+        d.appendChild(left); d.appendChild(el('span', 't', Sip.rs(r.gain) + pctText(r.pct) + (r.xirr === null ? '' : ', XIRR ' + Sip.xirrText(r.xirr, r.reported)))); rows.appendChild(d);
       });
     };
     bench.oninput = refresh; refresh();
@@ -421,7 +423,8 @@ details summary{cursor:pointer;min-height:40px;display:flex;align-items:center}
   function sipCard(s) {
     var card = el('div', 'card'), t = today();
     card.appendChild(el('b', '', s.name));
-    card.appendChild(el('div', 'hint', s.flows && s.flows.length ? s.flows.length + ' transactions you pasted'
+    card.appendChild(el('div', 'hint', s.summary ? 'Holdings summary from ' + Sip.shortDate(s.summary.date) + ' ' + s.summary.date.slice(0, 4) + ' (no payment dates)'
+      : s.flows && s.flows.length ? s.flows.length + ' transactions you pasted'
       : Sip.rs(s.amount) + ' on day ' + s.day + ' from ' + Sip.monthLabel(s.start) + (s.stepUp ? ', stepping up ' + s.stepUp + '% a year' : '') + (s.skipped && s.skipped.length ? ', ' + s.skipped.length + ' skipped months' : '')));
 
     var val = numInput('', 'any', 'Current value from your fund app'); val.placeholder = 'Value today';
@@ -439,15 +442,17 @@ details summary{cursor:pointer;min-height:40px;display:flex;align-items:center}
       var bench = numInput('7', 'any', 'Fixed yearly return to compare with, in percent'), direct = numInput('', 'any', 'Yearly saving of a direct plan, in percent');
       var years = numInput('10', '1', 'Years to project'), step = numInput(s.stepUp || 0, 'any', 'Yearly increase of the SIP, in percent');
       var ctl = el('div', 'grid2');
-      ctl.appendChild(labelled('Compare with a fixed return (% a year)', bench)); ctl.appendChild(labelled('Direct plan saves (% a year, optional)', direct));
-      ctl.appendChild(labelled('Project for (years)', years)); ctl.appendChild(labelled('Raise the SIP each year by (%)', step));
+      var holdOnly = a0.summaryOnly;
+      if (!holdOnly) { ctl.appendChild(labelled('Compare with a fixed return (% a year)', bench)); ctl.appendChild(labelled('Direct plan saves (% a year, optional)', direct)); }
+      ctl.appendChild(labelled('Project for (years)', years));
+      if (!holdOnly) ctl.appendChild(labelled('Raise the SIP each year by (%)', step));
       var refresh = function () {
         var a = Sip.analyze(s, P.snapshots, { benchmarkRate: num(bench, 7) / 100, directDiff: direct.value === '' ? null : num(direct, 0) / 100 });
         stats.textContent = ''; Sip.lines(a).forEach(function (l) { stats.appendChild(el('p', '', l)); });
         var yrs = Math.min(60, Math.max(1, Math.round(num(years, 10))));
-        proj.textContent = ''; proj.appendChild(el('b', '', 'If you keep going for ' + yrs + ' years'));
+        proj.textContent = ''; proj.appendChild(el('b', '', holdOnly ? 'If you add nothing more, for ' + yrs + ' years' : 'If you keep going for ' + yrs + ' years'));
         proj.appendChild(el('p', 'hint', 'Assumed yearly returns, not predictions. Real returns vary a lot.'));
-        Sip.projections(s, a, { years: yrs, stepUp: num(step, 0) / 100 }).forEach(function (r) {
+        Sip.projections(s, a, { years: yrs, stepUp: holdOnly ? 0 : num(step, 0) / 100 }).forEach(function (r) {
           var d = el('div', 'row'); d.appendChild(el('span', '', 'At ' + Sip.pct1(r.rate * 100) + ' a year'));
           d.appendChild(el('span', 't', Sip.rs(r.value) + ' (you add ' + Sip.rs(r.added) + ')')); proj.appendChild(d);
         });
@@ -455,7 +460,7 @@ details summary{cursor:pointer;min-height:40px;display:flex;align-items:center}
       [bench, direct, years, step].forEach(function (i) { i.oninput = refresh; });
       card.appendChild(stats); card.appendChild(ctl); card.appendChild(proj); refresh();
 
-      var det = el('details'); det.appendChild(el('summary', '', 'Saved values over time'));
+      var det = el('details'); det.appendChild(el('summary', '', 'Saved values over time')); if (holdOnly) det.style.display = 'none';
       Sip.growthLog(s, P.snapshots).reverse().forEach(function (g) {
         var d = el('div', 'row'); d.appendChild(el('span', 't', Sip.shortDate(g.date) + ' ' + g.date.slice(0, 4)));
         d.appendChild(el('span', 't', 'Value ' + Sip.rs(g.value) + ', gain ' + Sip.rs(g.gain) + pctText(g.pct) + (g.xirr === null ? '' : ', XIRR ' + Sip.pct1(g.xirr * 100)))); det.appendChild(d);
@@ -500,8 +505,9 @@ details summary{cursor:pointer;min-height:40px;display:flex;align-items:center}
       var snap = r.snapshots.filter(function (x) { return x.sipId === s.id; })[0], dup = P.sips.some(function (x) { return x.name.toLowerCase() === s.name.toLowerCase(); });
       var row = el('div', 'row'), left = el('div');
       left.appendChild(el('b', '', s.name));
-      left.appendChild(el('div', 'hint', (s.flows ? s.flows.length + ' transactions, invested ' + Sip.rs(s.flows.reduce(function (a, f) { return a + f.amount; }, 0)) : Sip.rs(s.amount) + ' a month from ' + Sip.monthLabel(s.start))
-        + (snap ? ', value ' + Sip.rs(snap.value) + ' on ' + Sip.shortDate(snap.date) : ', no value yet') + (dup ? '. Already added: it will be skipped.' : '')));
+      left.appendChild(el('div', 'hint', (s.summary ? 'Holdings summary: invested ' + Sip.rs(s.summary.invested) + ', value ' + Sip.rs(s.summary.value) + ' on ' + Sip.shortDate(s.summary.date) + (s.summary.xirr === null ? ', no XIRR reported' : ', XIRR ' + s.summary.xirr + '% as reported')
+        : (s.flows ? s.flows.length + ' transactions, invested ' + Sip.rs(s.flows.reduce(function (a, f) { return a + f.amount; }, 0)) : Sip.rs(s.amount) + ' a month from ' + Sip.monthLabel(s.start))
+          + (snap ? ', value ' + Sip.rs(snap.value) + ' on ' + Sip.shortDate(snap.date) : ', no value yet')) + (dup ? '. Already added: it will be skipped.' : '')));
       row.appendChild(left); box.appendChild(row);
     });
     var go = el('button', 'main', 'Import ' + r.sips.length + (r.sips.length === 1 ? ' SIP' : ' SIPs'));
@@ -527,6 +533,8 @@ details summary{cursor:pointer;min-height:40px;display:flex;align-items:center}
     P.sips.forEach(function (s) { rows.push([s.id, csvq(s.name), s.amount, s.day, s.start, s.stepUp || 0, csvq((s.skipped || []).join(';'))].join(',')); });
     rows.push('', 'SIP_PAYMENTS_USED', 'sip,date,amount');
     P.sips.forEach(function (s) { Sip.schedule(s, today()).forEach(function (f) { rows.push([s.id, f.date, f.amount].join(',')); }); });
+    rows.push('', 'SIP_SUMMARIES', 'name,invested,value,date,reported_xirr_pct');
+    P.sips.filter(function (s) { return s.summary; }).forEach(function (s) { rows.push([csvq(s.name), s.summary.invested, s.summary.value, s.summary.date, s.summary.xirr === null ? '' : s.summary.xirr].join(',')); });
     rows.push('', 'SIP_VALUES', 'sip,date,value');
     P.snapshots.forEach(function (x) { rows.push([x.sipId, x.date, x.value].join(',')); });
     $('sipOut').value = rows.join('\n');

@@ -1,7 +1,8 @@
-"""Read a mutual fund statement (PDF) or a screenshot and write a SIP import file for the app.
+"""Read a mutual fund statement and write a SIP import file for the app.
 
-    python -m research.sip_import statements/cas.pdf --password ABCDE1234F
-    python -m research.sip_import statements/shot1.png statements/shot2.png
+    python -m research.sip_import statements/cas.pdf --password ABCDE1234F          (transaction history: best)
+    python -m research.sip_import statements/Holdings_Statement.xlsx               (holdings summary, e.g. Groww)
+    python -m research.sip_import statements/shot1.png statements/shot2.png        (screenshots, best effort)
 
 Then, in the app: SIP tab, Import, choose journal/sip_import.json (or paste its text).
 
@@ -11,6 +12,7 @@ read as a digit), so it is best effort and always cross-checked and flagged.
 Nothing here uses AI or the internet, and no PAN, folio number or name is written out.
 """
 import argparse
+import csv
 import json
 import math
 import re
@@ -26,6 +28,7 @@ NUM_RE = re.compile(r"^\(?-?[\d,]+(?:\.\d+)?\)?$")
 ISIN_RE = re.compile(r"^(.*?)\s*-?\s*ISIN\s*:\s*(IN[A-Z0-9]{9}\d)", re.I)
 VALUE_RE = re.compile(r"(?:Market|Valuation)\s+Value\s+on\s+(\d{2}-[A-Za-z]{3}-\d{4})\s*:?\s*(?:INR|Rs\.?|\u20B9)?\s*([\d,]+(?:\.\d+)?)", re.I)
 IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+TABLE_TYPES = {".xlsx", ".xlsm", ".csv"}
 
 
 # ---------- small parsers ----------
@@ -182,6 +185,113 @@ def screenshot_to_sip(parsed, today):
     return sip, warnings
 
 
+# ---------- holdings summary (xlsx / csv, e.g. Groww) ----------
+def _text(cell):
+    return " ".join(str(cell).split()).lower() if cell is not None else ""
+
+
+def _num(cell):
+    """29998.48, '29,998.48', '-8.25%' -> float. 'N/A', '' and None -> None."""
+    if cell is None or isinstance(cell, bool):
+        return None
+    if isinstance(cell, (int, float)):
+        return float(cell)
+    t = str(cell).strip().replace(",", "").replace("%", "").replace("\u20B9", "")
+    try:
+        return float(t)
+    except ValueError:
+        return None
+
+
+def _as_on_date(rows, filename, today):
+    for row in rows:
+        for cell in row:
+            m = re.search(r"as\s+on\s*[:\-]?\s*(\d{4}-\d{2}-\d{2}|\d{2}[-/]\d{2}[-/]\d{4})", str(cell or ""), re.I)
+            if m:
+                d = m.group(1)
+                return d if re.match(r"\d{4}", d) else f"{d[6:10]}-{d[3:5]}-{d[0:2]}", None
+    m = re.search(r"(\d{4}-\d{2}-\d{2})", filename)
+    if m:
+        return m.group(1), None
+    return today, f"no statement date found, so values are dated {today}."
+
+
+def parse_holdings_rows(rows, filename="", today=None):
+    """A holdings summary has the total invested and the current value of each fund, but no payment dates.
+    Returns (sips, warnings). Each sip carries a 'summary' instead of transactions.
+    Folio numbers, units and your name are never copied out.
+    """
+    today = today or date.today().isoformat()
+    head = None
+    for i, row in enumerate(rows):
+        cells = [_text(c) for c in row]
+        if "scheme name" in cells and any(c.startswith("invested") for c in cells) and any(c in ("current value", "market value") for c in cells):
+            head = i
+            break
+    if head is None:
+        return [], []
+    cols = {_text(c): j for j, c in enumerate(rows[head]) if c is not None}
+    name_i = cols["scheme name"]
+    inv_i = next(j for c, j in cols.items() if c.startswith("invested"))
+    val_i = next(j for c, j in cols.items() if c in ("current value", "market value"))
+    xirr_i = cols.get("xirr")
+    asof, note = _as_on_date(rows[:head], filename, today)
+    warnings = [note] if note else []
+
+    reported = None  # the statement's own overall figures, used as a cross-check
+    for i, row in enumerate(rows[:head]):
+        if any("total investments" in _text(c) for c in row):
+            labels = [_text(c) for c in row]
+            nxt = next((r for r in rows[i + 1:head] if any(c is not None for c in r)), None)
+            if nxt:
+                pairs = dict(zip(labels, nxt))
+                reported = {"invested": _num(pairs.get("total investments")), "value": _num(pairs.get("current portfolio value"))}
+
+    sips, no_xirr = [], 0
+    for row in rows[head + 1:]:
+        name = " ".join(str(row[name_i]).split()) if len(row) > name_i and row[name_i] not in (None, "") else ""
+        inv, val = (_num(row[inv_i]) if len(row) > inv_i else None), (_num(row[val_i]) if len(row) > val_i else None)
+        if not name or (inv is None and val is None):
+            continue
+        if inv is None or val is None:
+            warnings.append(f"{name}: invested or current value is missing, skipped.")
+            continue
+        x = _num(row[xirr_i]) if xirr_i is not None and len(row) > xirr_i else None
+        no_xirr += x is None
+        sips.append({"name": name, "summary": {"invested": round(inv, 2), "value": round(val, 2), "date": asof, "xirr": x}})
+    if sips:
+        warnings.insert(0, "This is a holdings summary: it has no payment dates. The app can show invested, value, gain and the XIRR your own app reported, "
+                           "but cannot compare against a benchmark or find gaps. Download the transaction history for the full analysis.")
+        if no_xirr:
+            warnings.append(f"{no_xirr} fund{'s' if no_xirr != 1 else ''} had no XIRR in the statement (usually under a year old).")
+        if reported and reported["invested"] is not None:
+            tot_i, tot_v = sum(x["summary"]["invested"] for x in sips), sum(x["summary"]["value"] for x in sips)
+            if abs(tot_i - reported["invested"]) > 1 or (reported["value"] is not None and abs(tot_v - reported["value"]) > 1):
+                warnings.append(f"CHECK: the funds add up to invested {tot_i:,.0f} and value {tot_v:,.0f}, but the statement's own totals are "
+                                f"{reported['invested']:,.0f} and {reported['value'] or 0:,.0f}. A fund may be missing or misread.")
+    return sips, warnings
+
+
+def load_table(path):
+    """Rows of cells from an .xlsx or .csv file."""
+    path = Path(path)
+    if path.suffix.lower() == ".csv":
+        with open(path, newline="", encoding="utf-8-sig", errors="ignore") as fh:
+            return [row or [] for row in csv.reader(fh)]
+    from openpyxl import load_workbook
+    wb = load_workbook(path, data_only=True, read_only=True)
+    try:
+        best = []
+        for ws in wb.worksheets:
+            rows = [list(r) for r in ws.iter_rows(values_only=True)]
+            if any("scheme name" in [_text(c) for c in r] for r in rows):
+                return rows
+            best = best or rows
+        return best
+    finally:
+        wb.close()
+
+
 # ---------- files ----------
 def extract_pdf_text(path, password=None):
     from pypdf import PdfReader
@@ -211,11 +321,22 @@ def ocr_image(path):
         raise RuntimeError(f"OCR could not run ({e}). Install it with: sudo apt-get install -y tesseract-ocr")
 
 
+def resolve(path):
+    """Accept a bare file name if the file is in the statements folder."""
+    p = Path(path)
+    alt = ROOT / "statements" / p.name
+    return p if p.exists() or not alt.exists() else alt
+
+
 def build_import(paths, password=None, include_closed=False, sip_only=False, today=None):
     today = today or date.today().isoformat()
     sips, warnings = [], []
-    for p in map(Path, paths):
+    for given in paths:
+        p = resolve(given)
         kind = p.suffix.lower()
+        if not p.exists():
+            warnings.append(f"{p.name}: file not found. Drag it into the statements folder in the Explorer, then run the command with statements/{p.name}")
+            continue
         try:
             if kind in IMAGE_TYPES:
                 sip, w = screenshot_to_sip(parse_screenshot_text(ocr_image(p), p.stem), today)
@@ -223,8 +344,15 @@ def build_import(paths, password=None, include_closed=False, sip_only=False, tod
                 if sip:
                     sips.append(sip)
                 continue
+            if kind in TABLE_TYPES:
+                found, w = parse_holdings_rows(load_table(p), p.name, today)
+                warnings += w
+                sips += found
+                if not found:
+                    warnings.append(f"{p.name}: no holdings table found. This reader expects columns named Scheme Name, Invested Value and Current Value.")
+                continue
             text = extract_pdf_text(p, password) if kind == ".pdf" else p.read_text(errors="ignore")
-        except (ValueError, RuntimeError, OSError) as e:
+        except (ValueError, RuntimeError, OSError, KeyError) as e:
             warnings.append(f"{p.name}: {e}")
             continue
         schemes, w = parse_cas_text(text)
@@ -251,7 +379,7 @@ def build_import(paths, password=None, include_closed=False, sip_only=False, tod
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Make a SIP import file from a statement PDF or screenshots.")
-    ap.add_argument("files", nargs="+", help="statement PDF, text copy of it, or screenshot images")
+    ap.add_argument("files", nargs="+", help="statement PDF, holdings .xlsx/.csv, text copy of a statement, or screenshot images")
     ap.add_argument("--password", help="PDF password (for CAS files, usually your PAN in capitals)")
     ap.add_argument("--include-closed", action="store_true", help="keep funds you have fully redeemed")
     ap.add_argument("--sip-only", action="store_true", help="keep only funds with 2 or more SIP-type purchases")
@@ -260,7 +388,11 @@ def main(argv=None):
 
     result = build_import(args.files, args.password, args.include_closed, args.sip_only)
     for s in result["sips"]:
-        buys = [f for f in s.get("flows", []) if f["amount"] > 0]
+        if s.get("summary"):
+            m = s["summary"]
+            x = f", XIRR {m['xirr']}% (as reported)" if m["xirr"] is not None else ", no XIRR reported"
+            print(f"  {s['name']}: invested {m['invested']:,.0f}, value {m['value']:,.0f} on {m['date']}{x}")
+            continue
         shape = f"{len(s['flows'])} transactions, invested {sum(f['amount'] for f in s['flows']):,.0f}" if s.get("flows") else f"{s['amount']:,.0f} monthly from {s['start']}"
         val = f"value {s['value']['value']:,.0f} on {s['value']['date']}" if s.get("value") else "no value yet"
         print(f"  {s['name']}: {shape}; {val}")

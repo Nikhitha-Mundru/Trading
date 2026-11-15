@@ -1,0 +1,48 @@
+{
+ "version": 1,
+ "source_files": [
+  "Holdings_Statement_2026-11-15.xlsx"
+ ],
+ "sips": [
+  {
+   "name": "Example Gold Fund Direct Plan Growth",
+   "summary": {
+    "invested": 30000.0,
+    "value": 28500.5,
+    "date": "2026-11-15",
+    "xirr": -8.25
+   }
+  },
+  {
+   "name": "Example Silver FoF Direct Growth",
+   "summary": {
+    "invested": 10000.0,
+    "value": 9500.0,
+    "date": "2026-11-15",
+    "xirr": null
+   }
+  },
+  {
+   "name": "Example Healthcare Fund Direct Growth",
+   "summary": {
+    "invested": 20000.0,
+    "value": 20100.5,
+    "date": "2026-11-15",
+    "xirr": null
+   }
+  },
+  {
+   "name": "Example Small Cap Fund Direct Growth",
+   "summary": {
+    "invested": 70000.0,
+    "value": 76900.0,
+    "date": "2026-11-15",
+    "xirr": 22.25
+   }
+  }
+ ],
+ "warnings": [
+  "This is a holdings summary: it has no payment dates. The app can show invested, value, gain and the XIRR your own app reported, but cannot compare against a benchmark or find gaps. Download the transaction history for the full analysis.",
+  "2 funds had no XIRR in the statement (usually under a year old)."
+ ]
+}

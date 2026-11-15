@@ -19,10 +19,20 @@
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
   function rs(n) { return (n < 0 ? '-' : '') + '\u20B9' + Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 0 }); }
   function pct1(n) { return (Math.round(n * 10) / 10) + '%'; }
+  function pct2(n) { return (Math.round(n * 100) / 100) + '%'; }
+  // A figure your own app reported is shown exactly as reported (2 decimals); one I computed is rounded to 1.
+  function xirrText(xirr, reported) { return reported ? pct2(xirr * 100) : pct1(xirr * 100); }
 
   // ---------- input parsing ----------
   function validate(sip) {
     if (!sip.name || !String(sip.name).trim()) return 'Give the SIP a name.';
+    if (sip.summary) {
+      var m = sip.summary;
+      if (!(typeof m.invested === 'number' && isFinite(m.invested) && m.invested >= 0)) return 'The invested amount is missing.';
+      if (!(typeof m.value === 'number' && isFinite(m.value) && m.value >= 0)) return 'The current value is missing.';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(m.date || '') || isNaN(Date.parse(m.date))) return 'The statement date is missing.';
+      return '';
+    }
     var hasFlows = sip.flows && sip.flows.length;
     if (!(typeof sip.amount === 'number' && isFinite(sip.amount) && sip.amount > 0)) return 'Amount must be more than zero.';
     if (!(Number.isInteger(sip.day) && sip.day >= 1 && sip.day <= 28)) return 'Pick a day from 1 to 28, so every month has it.';
@@ -59,6 +69,7 @@
   // Pasted transactions win. Otherwise: one installment on `day` of every month from `start`,
   // minus skipped months, with the amount stepping up every 12 installments.
   function schedule(sip, asOf) {
+    if (sip.summary) return []; // a holdings summary has no payment dates
     if (sip.flows && sip.flows.length) return sip.flows.filter(function (f) { return f.date <= asOf; });
     var skipped = {}, out = [], step = (sip.stepUp || 0) / 100;
     (sip.skipped || []).forEach(function (m) { skipped[m] = true; });
@@ -72,7 +83,7 @@
     return out;
   }
   function sum(flows) { return flows.reduce(function (a, f) { return a + f.amount; }, 0); }
-  function monthlyNow(sip, asOf) { var f = schedule(sip, asOf); return f.length ? f[f.length - 1].amount : sip.amount; }
+  function monthlyNow(sip, asOf) { var f = schedule(sip, asOf); return f.length ? f[f.length - 1].amount : (sip.amount || 0); }
 
   // ---------- maths ----------
   // XIRR: the yearly rate that makes all your payments plus today's value net to zero, using actual dates.
@@ -141,6 +152,14 @@
   function analyze(sip, snapshots, opts) {
     opts = opts || {};
     var snap = latestSnapshot(sip.id, snapshots);
+    if (sip.summary) { // holdings summary: invested and value as of a date, plus the XIRR your own app reported
+      var sm = sip.summary, newer = snap && snap.date >= sm.date, value = newer ? snap.value : sm.value;
+      return { summaryOnly: true, value: value, asOf: newer ? snap.date : sm.date, flows: [], installments: null, invested: sm.invested,
+               gain: value - sm.invested, pct: sm.invested > 0 ? (value - sm.invested) / sm.invested * 100 : null,
+               xirr: typeof sm.xirr === 'number' ? sm.xirr / 100 : null, xirrReported: true, years: null,
+               benchRate: null, benchValue: null, aheadBy: null, directDiff: null, drag: null,
+               consistency: { months: 0, paid: 0, missed: [], longestGap: 0 } };
+    }
     if (!snap) return { value: null };
     var asOf = snap.date, flows = schedule(sip, asOf), invested = sum(flows);
     var years = flows.length ? (dayNumber(asOf) - dayNumber(flows[0].date)) / 365 : 0;
@@ -166,6 +185,13 @@
   // Plain-language lines, used by both the SIP tab and the Ask tab.
   function lines(a) {
     if (a.value === null) return ['No value entered yet. Type today\'s value from your fund app to see the analysis.'];
+    if (a.summaryOnly) {
+      return ['Invested ' + rs(a.invested) + ' (from your holdings statement, which has no payment dates).',
+              'Value ' + rs(a.value) + ' on ' + shortDate(a.asOf) + ': gain ' + rs(a.gain) + (a.pct === null ? '' : ' (' + pct1(a.pct) + ')') + '.',
+              a.xirr === null ? 'Your app did not report an XIRR for this fund, usually because it is under a year old.'
+                              : 'XIRR as reported by your app: ' + pct2(a.xirr * 100) + ' a year.',
+              'Without payment dates I cannot compare with a benchmark or check for gaps. Import your transaction history for that.'];
+    }
     var out = [];
     out.push('Invested ' + rs(a.invested) + ' over ' + plural(a.installments, 'installment') + '.');
     out.push('Value ' + rs(a.value) + ' on ' + shortDate(a.asOf) + ': gain ' + rs(a.gain) + (a.pct === null ? '' : ' (' + pct1(a.pct) + ')') + '.');
@@ -188,6 +214,13 @@
     data.sips.forEach(function (raw, i) {
       raw = raw || {};
       var label = raw.name ? String(raw.name) : 'SIP ' + (i + 1), flows = [], bad = 0;
+      if (raw.summary && typeof raw.summary === 'object') {
+        var sm = raw.summary, hold = { id: newId(), name: String(raw.name || '').trim(), amount: 0, day: 1, start: String(sm.date || '').slice(0, 7), stepUp: 0, skipped: [],
+          summary: { invested: Number(sm.invested), value: Number(sm.value), date: sm.date, xirr: sm.xirr === null || sm.xirr === undefined || isNaN(Number(sm.xirr)) ? null : Number(sm.xirr) } };
+        var herr = validate(hold);
+        if (herr) out.errors.push(label + ': ' + herr); else out.sips.push(hold);
+        return;
+      }
       (Array.isArray(raw.flows) ? raw.flows : []).forEach(function (f) {
         if (f && isDate(f.date) && typeof f.amount === 'number' && isFinite(f.amount) && f.amount !== 0) flows.push({ date: f.date, amount: f.amount }); else bad++;
       });
@@ -227,18 +260,20 @@
     var items = [], missing = [];
     sips.forEach(function (s) { var a = analyze(s, snapshots, opts); if (a.value === null) missing.push(s.name); else items.push({ sip: s, a: a }); });
     if (!items.length) return { count: 0, value: null, missing: missing };
-    var invested = 0, value = 0, bench = 0, pts = [], allFlows = [], asOfs = [];
+    var invested = 0, value = 0, bench = 0, pts = [], allFlows = [], asOfs = [], summaryCount = 0, benchRate = null;
     items.forEach(function (it) {
-      invested += it.a.invested; value += it.a.value; bench += it.a.benchValue; asOfs.push(it.a.asOf);
+      invested += it.a.invested; value += it.a.value; asOfs.push(it.a.asOf);
+      if (it.a.summaryOnly) summaryCount++; else bench += it.a.benchValue;
+      if (benchRate === null && it.a.benchRate !== null) benchRate = it.a.benchRate;
       it.a.flows.forEach(function (f) { pts.push({ t: dayNumber(f.date), a: -f.amount }); allFlows.push(f); });
       pts.push({ t: dayNumber(it.a.asOf), a: it.a.value });
     });
     asOfs.sort();
     var latest = asOfs[asOfs.length - 1], earliest = asOfs[0];
     var firstDate = allFlows.length ? allFlows.map(function (f) { return f.date; }).sort()[0] : null;
-    var x = !allFlows.length ? null : value <= 0 ? (invested > 0 ? -1 : null) : solveXirr(pts);
+    var x = summaryCount || !allFlows.length ? null : value <= 0 ? (invested > 0 ? -1 : null) : solveXirr(pts); // needs payment dates for every fund
     var rows = items.map(function (it) {
-      return { name: it.sip.name, invested: it.a.invested, value: it.a.value, gain: it.a.gain, pct: it.a.pct, xirr: it.a.xirr,
+      return { name: it.sip.name, invested: it.a.invested, value: it.a.value, gain: it.a.gain, pct: it.a.pct, xirr: it.a.xirr, reported: !!it.a.xirrReported,
                share: value > 0 ? it.a.value / value * 100 : null };
     });
     var ranked = rows.filter(function (r) { return r.xirr !== null; }).sort(function (a, b) { return b.xirr - a.xirr; });
@@ -246,7 +281,7 @@
              pct: invested > 0 ? (value - invested) / invested * 100 : null, xirr: x,
              years: firstDate ? (dayNumber(latest) - dayNumber(firstDate)) / 365 : 0,
              asOf: latest, staleDays: dayNumber(latest) - dayNumber(earliest),
-             benchRate: items[0].a.benchRate, benchValue: bench, aheadBy: value - bench,
+             benchRate: benchRate === null ? 0.07 : benchRate, benchValue: summaryCount ? null : bench, aheadBy: summaryCount ? null : value - bench, summaryCount: summaryCount,
              rows: rows, best: ranked.length > 1 ? ranked[0] : null, worst: ranked.length > 1 ? ranked[ranked.length - 1] : null,
              largest: rows.length > 1 ? rows.slice().sort(function (a, b) { return b.value - a.value; })[0] : null,
              missing: missing, cumulative: cumulativeByMonth(allFlows, latest) };
@@ -263,17 +298,18 @@
 
   function brief(name, a) {
     if (a.value === null) return name + ': no value entered yet.';
-    return name + ': gain ' + rs(a.gain) + (a.pct === null ? '' : ' (' + pct1(a.pct) + ')') + (a.xirr === null ? '' : ', XIRR ' + pct1(a.xirr * 100)) + '.';
+    return name + ': gain ' + rs(a.gain) + (a.pct === null ? '' : ' (' + pct1(a.pct) + ')') + (a.xirr === null ? '' : ', XIRR ' + xirrText(a.xirr, a.xirrReported) + (a.xirrReported ? ' (as reported)' : '')) + '.';
   }
 
   function portfolioLines(p) {
     if (p.value === null) return [p.missing.length ? 'Type today\'s value on a SIP card to see all your SIPs together.' : 'No SIP added yet.'];
-    var out = [];
-    out.push('Right now your SIPs together are ' + (p.aheadBy >= 0 ? 'ahead of' : 'behind') + ' a ' + pct1(p.benchRate * 100) + ' a year benchmark by ' + rs(Math.abs(p.aheadBy)) + '.');
+    var out = [], partial = p.benchValue === null;
+    if (!partial) out.push('Right now your SIPs together are ' + (p.aheadBy >= 0 ? 'ahead of' : 'behind') + ' a ' + pct1(p.benchRate * 100) + ' a year benchmark by ' + rs(Math.abs(p.aheadBy)) + '.');
     out.push('All SIPs together (' + plural(p.count, 'fund') + '): invested ' + rs(p.invested) + ', value ' + rs(p.value) + ', gain ' + rs(p.gain) + (p.pct === null ? '' : ' (' + pct1(p.pct) + ')') + '.');
-    out.push(p.xirr === null ? 'Combined XIRR could not be worked out.'
+    if (partial) out.push('Combined XIRR needs payment dates for every fund, and ' + plural(p.summaryCount, 'fund') + ' here ' + (p.summaryCount === 1 ? 'has' : 'have') + ' only a holdings summary. Each fund\'s XIRR below is the one your app reported.');
+    else out.push(p.xirr === null ? 'Combined XIRR could not be worked out.'
       : 'Combined XIRR: ' + pct1(p.xirr * 100) + ' a year.' + (p.years < 1 ? ' Under a year of data, so treat it as rough.' : ''));
-    if (p.best) out.push('Strongest: ' + p.best.name + ' (XIRR ' + pct1(p.best.xirr * 100) + '). Weakest: ' + p.worst.name + ' (XIRR ' + pct1(p.worst.xirr * 100) + ').');
+    if (p.best) out.push('Strongest: ' + p.best.name + ' (XIRR ' + xirrText(p.best.xirr, p.best.reported) + '). Weakest: ' + p.worst.name + ' (XIRR ' + xirrText(p.worst.xirr, p.worst.reported) + ').');
     if (p.largest) out.push('Largest holding: ' + p.largest.name + ', ' + pct1(p.largest.share) + ' of the total value.');
     if (p.missing.length) out.push('Not counted yet (no value entered): ' + p.missing.join(', ') + '.');
     if (p.staleDays > 31) out.push('Your saved values are up to ' + plural(p.staleDays, 'day') + ' apart. Save fresh values for a cleaner picture.');
@@ -282,6 +318,7 @@
 
   // One row per saved value, with XIRR as it stood on that date.
   function growthLog(sip, snapshots) {
+    if (sip.summary) return [];
     return (snapshots || []).filter(function (s) { return s.sipId === sip.id; })
       .sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; })
       .map(function (s) {
@@ -295,5 +332,5 @@
            xirr: xirr, benchmark: benchmark, costDrag: costDrag, consistency: consistency, project: project,
            analyze: analyze, projections: projections, lines: lines, growthLog: growthLog,
            importData: importData, portfolio: portfolio, portfolioLines: portfolioLines, cumulativeByMonth: cumulativeByMonth, short: short, brief: brief,
-           monthKey: monthKey, monthLabel: monthLabel, shortDate: shortDate, rs: rs, pct1: pct1 };
+           monthKey: monthKey, monthLabel: monthLabel, shortDate: shortDate, rs: rs, pct1: pct1, xirrText: xirrText };
 });

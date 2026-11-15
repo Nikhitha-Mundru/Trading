@@ -227,4 +227,67 @@ test('import: ids are unique per SIP and snapshots point at them', () => {
   const r = Sip.importData(sample, mkId());
   assert.notStrictEqual(r.sips[0].id, r.sips[1].id); assert.strictEqual(r.snapshots[0].sipId, r.sips[0].id);
 });
+
+// ---- holdings summaries (no payment dates), like a Groww holdings statement ----
+const holdSample = fs.readFileSync(path.join(__dirname, 'sip_import_holdings_sample.json'), 'utf8');
+const hold = (over) => Object.assign({ id: 'h1', name: 'Gold fund', amount: 0, day: 1, start: '2026-11', stepUp: 0, skipped: [], summary: { invested: 30000, value: 28500, date: '2026-11-15', xirr: -8.25 } }, over);
+test('holdings: the file the PC tool makes from an xlsx loads cleanly', () => {
+  const r = Sip.importData(holdSample, mkId());
+  assert.deepStrictEqual(r.errors, []); assert.strictEqual(r.sips.length, 4);
+  assert.deepStrictEqual(r.sips[0].summary, { invested: 30000, value: 28500.5, date: '2026-11-15', xirr: -8.25 });
+  assert.strictEqual(r.sips[1].summary.xirr, null); assert.strictEqual(r.snapshots.length, 0); // the value lives in the summary
+  assert.ok(r.warnings.some(w => w.includes('holdings summary')));
+});
+test('holdings: analysis shows invested, value, gain and the reported XIRR, nothing invented', () => {
+  const a = Sip.analyze(hold(), []);
+  assert.deepStrictEqual([a.summaryOnly, a.invested, a.value, a.gain, a.xirr, a.benchValue, a.installments], [true, 30000, 28500, -1500, -0.0825, null, null]);
+  near(a.pct, -5);
+  const l = Sip.lines(a);
+  assert.ok(l[0].startsWith('Invested \u20B930,000 (from your holdings statement') && l[1].includes('gain -\u20B91,500 (-5%)'));
+  assert.ok(l[2] === 'XIRR as reported by your app: -8.25% a year.' && l[3].includes('Import your transaction history'));
+  assert.ok(Sip.lines(Sip.analyze(hold({ summary: { invested: 1000, value: 1100, date: '2026-11-15', xirr: null } }), []))[2].includes('did not report an XIRR'));
+});
+test('holdings: a newer typed value replaces the statement value', () => {
+  const a = Sip.analyze(hold(), [{ sipId: 'h1', date: '2026-12-01', value: 29000 }]);
+  assert.deepStrictEqual([a.value, a.asOf, a.gain], [29000, '2026-12-01', -1000]);
+  assert.strictEqual(Sip.analyze(hold(), [{ sipId: 'h1', date: '2026-10-01', value: 1 }]).value, 28500); // an older one is ignored
+});
+test('holdings: no schedule, no growth log, projections only grow what is there', () => {
+  assert.deepStrictEqual(Sip.schedule(hold(), '2026-12-31'), []); assert.deepStrictEqual(Sip.growthLog(hold(), [{ sipId: 'h1', date: '2026-12-01', value: 5 }]), []);
+  const a = Sip.analyze(hold({ summary: { invested: 1000, value: 1000, date: '2026-11-15', xirr: null } }), []);
+  const p = Sip.projections(hold(), a, { years: 1, rates: [0.12] });
+  near(p[0].value, 1120, 1e-6); near(p[0].added, 0);
+});
+test('holdings: validate', () => {
+  assert.strictEqual(Sip.validate(hold()), '');
+  assert.ok(Sip.validate(hold({ summary: { invested: -1, value: 5, date: '2026-11-15' } })).includes('invested'));
+  assert.ok(Sip.validate(hold({ summary: { invested: 5, value: 'x', date: '2026-11-15' } })).includes('value'));
+  assert.ok(Sip.validate(hold({ summary: { invested: 5, value: 5, date: 'nope' } })).includes('date'));
+  assert.ok(Sip.validate(hold({ name: '' })));
+});
+test('portfolio of holdings only: totals work, no invented benchmark or combined XIRR', () => {
+  const hs = [hold({ id: 'h1', name: 'Gold' }), hold({ id: 'h2', name: 'Small cap', summary: { invested: 70000, value: 76900, date: '2026-11-15', xirr: 22.25 } })];
+  const p = Sip.portfolio(hs, []);
+  assert.deepStrictEqual([p.count, p.invested, p.value, p.gain, p.xirr, p.benchValue, p.aheadBy, p.summaryCount], [2, 100000, 105400, 5400, null, null, null, 2]);
+  assert.strictEqual(p.best.name, 'Small cap'); assert.strictEqual(p.largest.name, 'Small cap');
+  assert.ok(Sip.portfolioLines(p).some(x => x.includes('Strongest: Small cap (XIRR 22.25%). Weakest: Gold (XIRR -8.25%)')));
+  const l = Sip.portfolioLines(p);
+  assert.ok(l[0].startsWith('All SIPs together (2 funds): invested \u20B91,00,000, value \u20B91,05,400, gain \u20B95,400 (5.4%)'));
+  assert.ok(l[1].startsWith('Combined XIRR needs payment dates for every fund, and 2 funds here have only a holdings summary'));
+  assert.ok(!l.some(x => x.startsWith('Right now your SIPs together')));
+});
+test('portfolio mixing a full history with a holdings summary: no combined XIRR, benchmark withheld', () => {
+  const full = sip({ id: 'A', name: 'Fund A', day: 1, start: '2025-01' });
+  const p = Sip.portfolio([full, hold({ id: 'h1', name: 'Gold' })], [{ sipId: 'A', date: '2025-12-31', value: 13000 }]);
+  assert.deepStrictEqual([p.count, p.xirr, p.benchValue, p.summaryCount], [2, null, null, 1]);
+  assert.strictEqual(p.invested, 42000); // 12,000 from the history plus 30,000 from the summary
+  assert.strictEqual(p.rows.length, 2);
+});
+test('holdings: brief says the XIRR is reported, and the import rejects a bad summary but keeps good ones', () => {
+  assert.ok(Sip.brief('Gold', Sip.analyze(hold(), [])).includes('XIRR -8.25% (as reported)'));
+  assert.strictEqual(Sip.xirrText(0.2225, true), '22.25%'); assert.strictEqual(Sip.xirrText(0.2225, false), '22.3%');
+  const file = { version: 1, sips: [{ name: 'Good', summary: { invested: 100, value: 120, date: '2026-11-15', xirr: 'N/A' } }, { name: 'Bad', summary: { invested: 'x', value: 1, date: '2026-11-15' } }] };
+  const r = Sip.importData(JSON.stringify(file), mkId());
+  assert.deepStrictEqual([r.sips.length, r.sips[0].summary.xirr], [1, null]); assert.ok(r.errors[0].startsWith('Bad:'));
+});
 console.log(process.exitCode ? 'some tests failed' : 'all ' + n + ' sip tests pass');

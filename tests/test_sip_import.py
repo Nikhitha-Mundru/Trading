@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from research.sip_import import (build_import, expected_invested, extract_pdf_text, ocr_image, parse_cas_text, parse_date,
+from research.sip_import import (build_import, expected_invested, extract_pdf_text, ocr_image, parse_cas_text, parse_date, parse_holdings_rows,
                                  parse_screenshot_text, scheme_to_sip, screenshot_to_sip, to_num)
 
 FIXTURE = Path(__file__).parent / "sip_import_sample.json"
@@ -206,3 +206,116 @@ def test_password_protected_pdf(tmp_path):
     ok = build_import([pdf], password="ABCDE1234F", today="2026-11-15")
     assert len(ok["sips"]) == 2 and "Nifty" in ok["sips"][0]["name"]
     assert "Market Value" in extract_pdf_text(pdf, "ABCDE1234F")
+
+
+# ---- holdings summary (xlsx), laid out like a Groww holdings statement. All values invented. ----
+HOLDINGS_FIXTURE = Path(__file__).parent / "sip_import_holdings_sample.json"
+
+
+def holdings_rows(as_on="2026-11-15", total_invested=130000.0, total_value=135000.0):
+    return [
+        ["Personal Details"], ["Name", "Test Person"], ["Mobile Number", "9999999999"], ["PAN", "ABCDE1234F"], [], [],
+        ["HOLDING SUMMARY"], [], [],
+        ["Total Investments", "Current Portfolio Value", "Profit/Loss", "Profit/Loss %", "XIRR"],
+        [total_invested, total_value, total_value - total_invested, "3.85%", "9.10%"], [], [],
+        [f"HOLDINGS AS ON {as_on}"], [], [],
+        ["Scheme Name", "AMC", "Category", "Sub-category", "Folio No.", "Source", "Units", "Invested Value", "Current Value", "Returns", "XIRR"],
+        [],
+        ["Example Gold Fund Direct Plan Growth", "Example MF", "Commodities", "Gold", "910000000001", "Groww", 600.5, 30000.0, 28500.5, -1499.5, "-8.25%"],
+        ["Example Silver FoF Direct Growth", "Example MF", "Commodities", "Silver", "20000002", "Groww", 400.1, 10000.0, 9500.0, -500.0, "N/A"],
+        ["Example Healthcare Fund Direct Growth", "Example MF", "Equity", "Sectoral", "50000003", "Groww", 32.0, 20000.0, 20100.5, 100.5, "N/A"],
+        ["Example Small Cap Fund Direct Growth", "Example MF", "Equity", "Small Cap", "6000004", "Groww", 1800.0, 70000.0, 76900.0, 6900.0, "22.25%"],
+    ]
+
+
+def make_holdings_xlsx(path, **kw):
+    pytest.importorskip("openpyxl")
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    for row in holdings_rows(**kw):
+        ws.append(row)
+    wb.save(path)
+    return path
+
+
+def test_holdings_rows_become_summary_sips():
+    sips, w = parse_holdings_rows(holdings_rows(), "Holdings_Statement_2026-11-15.xlsx", "2026-11-20")
+    assert [s["name"] for s in sips] == ["Example Gold Fund Direct Plan Growth", "Example Silver FoF Direct Growth", "Example Healthcare Fund Direct Growth", "Example Small Cap Fund Direct Growth"]
+    assert sips[0]["summary"] == {"invested": 30000.0, "value": 28500.5, "date": "2026-11-15", "xirr": -8.25}
+    assert sips[1]["summary"]["xirr"] is None and sips[3]["summary"]["xirr"] == 22.25  # "N/A" is not a number
+    text = "\n".join(w)
+    assert "holdings summary: it has no payment dates" in text and "2 funds had no XIRR" in text
+    assert not any(x.startswith("CHECK") for x in w)  # the funds add up to the statement's own totals
+
+
+def test_holdings_totals_cross_check_catches_a_missing_fund():
+    rows = holdings_rows(total_invested=150000.0, total_value=160000.0)
+    _, w = parse_holdings_rows(rows, "x.xlsx", "2026-11-20")
+    assert any(x.startswith("CHECK") and "130,000" in x and "150,000" in x for x in w)
+
+
+def test_holdings_date_comes_from_the_sheet_then_the_filename_then_today():
+    rows = holdings_rows()
+    assert parse_holdings_rows(rows, "a.xlsx", "2026-12-01")[0][0]["summary"]["date"] == "2026-11-15"
+    no_date = [r for r in rows if not (r and str(r[0]).startswith("HOLDINGS AS ON"))]
+    assert parse_holdings_rows(no_date, "Holdings_2026-10-31.xlsx", "2026-12-01")[0][0]["summary"]["date"] == "2026-10-31"
+    sips, w = parse_holdings_rows(no_date, "holdings.xlsx", "2026-12-01")
+    assert sips[0]["summary"]["date"] == "2026-12-01" and any("no statement date found" in x for x in w)
+    slash = [["Scheme Name", "Invested Value", "Current Value"], ["As on 15/11/2026"], ["F", 1, 2]]
+    assert parse_holdings_rows([["Holdings as on 15/11/2026"]] + slash[:1] + slash[2:], "x", "2026-12-01")[0][0]["summary"]["date"] == "2026-11-15"
+
+
+def test_holdings_edge_cases():
+    assert parse_holdings_rows([["nothing"], ["here"]], "x", "2026-11-20") == ([], [])
+    rows = [["Scheme Name", "Invested Value", "Current Value", "XIRR"], ["Fund A", 100, None, None], ["Fund B", "1,000.50", "1,100.25", "12.5%"], ["Disclaimer text only"]]
+    sips, w = parse_holdings_rows(rows, "f_2026-11-15.xlsx", "2026-11-20")
+    assert [s["name"] for s in sips] == ["Fund B"] and sips[0]["summary"]["xirr"] == 12.5 and sips[0]["summary"]["invested"] == 1000.5
+    assert any("Fund A" in x and "missing" in x for x in w)
+    assert not any("Disclaimer" in x for x in w)
+
+
+def test_holdings_xlsx_file_end_to_end(tmp_path):
+    f = make_holdings_xlsx(tmp_path / "Holdings_Statement_2026-11-15.xlsx")
+    r = build_import([f], today="2026-11-20")
+    assert len(r["sips"]) == 4 and r["sips"][3]["summary"]["value"] == 76900.0
+    out = json.dumps(r)
+    for secret in ("ABCDE1234F", "9999999999", "Test Person", "910000000001", "20000002", "6000004", "Folio"):
+        assert secret not in out  # personal details and folio numbers are never copied
+
+
+def test_holdings_csv_works_too(tmp_path):
+    import csv
+    p = tmp_path / "h.csv"
+    with open(p, "w", newline="") as fh:
+        csv.writer(fh).writerows(holdings_rows())
+    assert len(build_import([p], today="2026-11-20")["sips"]) == 4
+
+
+def test_a_bare_file_name_is_found_in_the_statements_folder(tmp_path, monkeypatch):
+    import research.sip_import as mod
+    (tmp_path / "statements").mkdir()
+    make_holdings_xlsx(tmp_path / "statements" / "Holdings_2026-11-15.xlsx")
+    monkeypatch.setattr(mod, "ROOT", tmp_path)
+    assert len(build_import(["Holdings_2026-11-15.xlsx"], today="2026-11-20")["sips"]) == 4
+
+
+def test_a_missing_file_says_where_to_put_it(tmp_path, monkeypatch):
+    import research.sip_import as mod
+    monkeypatch.setattr(mod, "ROOT", tmp_path)
+    r = build_import(["Holdings_Statement_2026-11-15.xlsx"], today="2026-11-20")
+    assert r["sips"] == [] and "statements folder" in r["warnings"][0] and "statements/Holdings_Statement_2026-11-15.xlsx" in r["warnings"][0]
+
+
+def test_an_excel_file_without_a_holdings_table_is_explained(tmp_path):
+    pytest.importorskip("openpyxl")
+    from openpyxl import Workbook
+    wb = Workbook()
+    wb.active.append(["just", "some", "cells"])
+    wb.save(tmp_path / "odd.xlsx")
+    assert "no holdings table found" in build_import([tmp_path / "odd.xlsx"], today="2026-11-20")["warnings"][0]
+
+
+def test_holdings_output_matches_the_fixture_the_app_tests_use(tmp_path):
+    result = build_import([make_holdings_xlsx(tmp_path / "Holdings_Statement_2026-11-15.xlsx")], today="2026-11-20")
+    assert result == json.loads(HOLDINGS_FIXTURE.read_text())

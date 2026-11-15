@@ -2,25 +2,41 @@
 
 You do not type anything. A PC tool in your Codespace reads your fund statement (or screenshots) and writes a file. The app imports that file in one tap, then analyses it. Nothing is uploaded anywhere and no AI is used.
 
-## Which one to use
-| Source | Accuracy | What it gives |
+## Which file to use
+| Source | Accuracy | What the app can show |
 | --- | --- | --- |
-| **Statement PDF** (CAMS / KFintech consolidated statement) | High: dates and amounts are read as text | Every purchase and redemption, plus the closing value, for every fund |
+| **Transaction history**: a CAMS / KFintech consolidated statement (PDF) | High: dates and amounts are read as text | The full analysis: your yearly return (XIRR), benchmark, gaps, projections, and a combined XIRR across funds |
+| **Holdings summary**: for example a Groww holdings statement (.xlsx or .csv) | High for what it contains, but it has no payment dates | Invested, value, gain, and the XIRR your own app reported. No benchmark, no gaps, no combined XIRR |
 | **Screenshots** | Lower: OCR can misread numbers | Value, SIP amount, day and start month, if the screen shows them |
 
-Use the statement whenever you can. Use screenshots for a quick fill.
+Use the transaction history whenever you can. A holdings summary is a good quick start, and you can replace it later.
 
 ## One-time setup
 ```
 pip install -r requirements.txt
 mkdir -p statements
 ```
+Drag your file into the `statements` folder in the Explorer. You can then use just the file name in the command, and the tool finds it there.
 For screenshots only: `sudo apt-get install -y tesseract-ocr`
 
 ## 1. Get your statement
 Ask for a **consolidated account statement (CAS)** with all transactions from your first investment. CAMS, KFintech and MF Central all offer it free by email. The PDF is password protected. Use the password you chose when you requested it, or the one in the email. For depository statements it is usually your PAN in capitals. The tool never writes your PAN, folio number or name anywhere.
 
-## 2. Run the tool
+## 1b. If all you have is a holdings statement (Groww and similar)
+The holdings statement is an Excel or CSV file with one row per fund: scheme name, invested value, current value and XIRR. Run:
+```
+python -m research.sip_import Holdings_Statement_2026-11-15.xlsx
+```
+It reads the columns named Scheme Name, Invested Value, Current Value and XIRR, and the "Holdings as on" date. It cross-checks that the funds add up to the statement's own totals, and raises a CHECK if they do not. Your name, mobile number, PAN, folio numbers and units are never copied out.
+
+What the app does with it:
+- Each fund shows invested, value, gain and the XIRR your app reported. A fund with "N/A" has no reported XIRR, usually because it is under a year old, and the app says so instead of guessing.
+- There is no benchmark comparison, gap check or combined XIRR, because those need payment dates. Combined totals still work.
+- The projection shows what the current value could grow to if you add nothing more.
+
+To get payment dates as well, request the consolidated statement (CAS) from CAMS or KFintech. It lists transactions for every fund held under your PAN, including funds bought through an app like Groww. Some apps also offer a transaction or order history report under their reports section. If you have one, show me a few lines with your name, PAN and folio removed and I will adapt the reader.
+
+## 2. Run the tool on the transaction history
 Drag the PDF into the `statements` folder in the Explorer, then:
 ```
 python -m research.sip_import statements/cas.pdf --password YOURPASSWORD
@@ -49,6 +65,7 @@ Importing twice is safe: funds you already added are skipped.
 
 ## What gets imported
 - Money in: SIP and lump-sum purchases. Money out: redemptions.
+- From a transaction history: purchases and redemptions with their dates. From a holdings summary: invested, value and the reported XIRR.
 - Left out on purpose, and counted in the notes: switches between funds and dividend reinvestments, because they are not new money from you. Stamp duty lines are ignored.
 - The value is the closing value on the statement date. If the statement is old, type a fresh value on the fund's card in the app. The analysis then uses the newer date.
 
@@ -57,6 +74,9 @@ Importing twice is safe: funds you already added are skipped.
 - The tool cross-checks the "Invested" figure it reads against what the SIP amount and start month would give, and raises a CHECK if they differ by more than 5%.
 - If the screen does not show the SIP amount and start month, no schedule can be built. The tool says what it could read, and you add the fund with the quick form or use the statement.
 - The value is dated today, because a screenshot has no reliable date.
+
+## If it says "file not found"
+The file has to be inside the Codespace. Drag it into the `statements` folder in the Explorer panel (not just into your computer's folders), then run the command again with just the file name.
 
 ## If it says "no funds found"
 The reader expects the common CAMS/KFintech layout: a line with `ISIN: INF...` for each fund, then transaction lines like `05-Jan-2025 Purchase - SIP 2,000.00 20.123 99.38 20.123` (date, description, amount, units, price, balance). I could only test it on invented text in that shape, plus a generated PDF. Real statements vary. If yours is different, copy a few transaction lines and the fund heading line, remove your name, PAN, folio and email, and show them to me in the chat. I will adapt the reader.

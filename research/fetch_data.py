@@ -52,13 +52,16 @@ def main(argv=None):
     if not symbols:
         print("Usage: python -m research.fetch_data INFY SBIN ITC")
         return 1
+    failures = 0
     for s in symbols:
         try:
             df = fetch(s)
             print(f"{s}: downloaded {len(df)} candles, file now has {save(s, df)}" if len(df) else f"{s}: nothing returned (market closed or wrong symbol)")
         except Exception as e:  # network or symbol problems should not stop the other symbols
+            failures += 1
             print(f"{s}: failed ({e})")
-    return 0
+    # Exit code 1 only when EVERY symbol failed, so the nightly job shows a red cross for a broken night
+    return 1 if failures == len(symbols) else 0
 
 
 if __name__ == "__main__":

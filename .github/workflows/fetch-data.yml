@@ -1,0 +1,42 @@
+name: Fetch candles
+
+on:
+  schedule:
+    - cron: "0 11 * * 1-5"   # 16:30 IST, Monday to Friday, after the market closes
+  workflow_dispatch:          # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-data
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install libraries
+        run: pip install pandas yfinance
+
+      - name: Fetch candles for every symbol in symbols.txt
+        run: python -m research.fetch_data $(cat symbols.txt)
+
+      - name: Save new candles to the repo
+        run: |
+          git config user.name "candle-bot"
+          git config user.email "candle-bot@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "No new candles (market holiday or nothing changed)."
+          else
+            git commit -m "Add candles for $(date -u +%Y-%m-%d)"
+            git push
+          fi

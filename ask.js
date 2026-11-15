@@ -134,14 +134,17 @@
   function sipAnswer(ctx) {
     var d = ctx.sipData;
     if (!S || !d || !d.sips || !d.sips.length) return 'No SIP is set up yet. Add your SIP on the SIP tab.';
-    var out = d.sips.map(function (sip) {
-      var l = S.lines(S.analyze(sip, d.snapshots || [], {}));
-      return sip.name + ': ' + l.slice(0, 4).join(' ');
-    });
+    var snaps = d.snapshots || [], out = [];
+    if (d.sips.length > 1) {
+      out = S.portfolioLines(S.portfolio(d.sips, snaps, {}));
+      d.sips.forEach(function (sip) { out.push(S.brief(sip.name, S.analyze(sip, snaps, {}))); });
+    } else {
+      out = [d.sips[0].name + ': ' + S.lines(S.analyze(d.sips[0], snaps, {})).slice(0, 4).join(' ')];
+    }
     return out.join('\n') + '\nSIPs sit outside your trading limits.';
   }
   function help() {
-    return 'I can answer from your own rules and journal. Try: "Can I trade now?", "How is my SIP doing?", "How much can I risk?", "Today\'s P&L", "What are my rules?", "Why was I blocked?", "How am I doing?", "What is VWAP?", or "How many shares entry 100 stop 98".';
+    return 'I can answer from your own rules and journal. Try: "Can I trade now?", "How are my SIPs doing?", "How much can I risk?", "Today\'s P&L", "What are my rules?", "Why was I blocked?", "How am I doing?", "What is VWAP?", or "How many shares entry 100 stop 98".';
   }
 
   var INTENTS = [

@@ -76,14 +76,9 @@
 
   // ---------- maths ----------
   // XIRR: the yearly rate that makes all your payments plus today's value net to zero, using actual dates.
-  function xirr(flows, value, asOf) {
-    if (!flows.length) return null;
-    var invested = sum(flows);
-    if (value <= 0) return invested > 0 ? -1 : null;
-    var pts = flows.map(function (f) { return { t: dayNumber(f.date), a: -f.amount }; });
-    pts.push({ t: dayNumber(asOf), a: value });
-    var t0 = Math.min.apply(null, pts.map(function (p) { return p.t; })), t1 = dayNumber(asOf);
-    if (t1 <= t0) return null;
+  function solveXirr(pts) {
+    var times = pts.map(function (p) { return p.t; }), t0 = Math.min.apply(null, times), tEnd = Math.max.apply(null, times);
+    if (tEnd <= t0) return null;
     function npv(r) { return pts.reduce(function (s, p) { return s + p.a / Math.pow(1 + r, (p.t - t0) / 365); }, 0); }
     var lo = -0.9999, hi = 10, flo = npv(lo), fhi = npv(hi);
     if (!isFinite(flo) || !isFinite(fhi) || flo * fhi > 0) return null;
@@ -92,6 +87,14 @@
       if ((fm > 0) === (flo > 0)) { lo = mid; flo = fm; } else hi = mid;
     }
     return (lo + hi) / 2;
+  }
+  function xirr(flows, value, asOf) {
+    if (!flows.length) return null;
+    var invested = sum(flows);
+    if (value <= 0) return invested > 0 ? -1 : null;
+    var pts = flows.map(function (f) { return { t: dayNumber(f.date), a: -f.amount }; });
+    pts.push({ t: dayNumber(asOf), a: value });
+    return solveXirr(pts);
   }
 
   // What the same payments, on the same dates, would be worth at a fixed yearly rate.
@@ -175,6 +178,78 @@
     return out;
   }
 
+  // Running total of money put in, month by month, across all the flows given.
+  function cumulativeByMonth(flows, asOf) {
+    if (!flows.length) return [];
+    var sorted = flows.slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    var s = monthIndex(monthKey(sorted[0].date)), e = monthIndex(monthKey(asOf)), out = [], total = 0, k = 0;
+    for (var i = s; i <= e; i++) {
+      var key = keyFromIndex(i), added = 0;
+      while (k < sorted.length && monthKey(sorted[k].date) === key) { added += sorted[k].amount; k++; }
+      total += added; out.push({ month: key, added: added, invested: total });
+    }
+    return out;
+  }
+
+  // All SIPs together. Only SIPs with a saved value are counted, so invested and value compare like for like.
+  function portfolio(sips, snapshots, opts) {
+    opts = opts || {};
+    var items = [], missing = [];
+    sips.forEach(function (s) { var a = analyze(s, snapshots, opts); if (a.value === null) missing.push(s.name); else items.push({ sip: s, a: a }); });
+    if (!items.length) return { count: 0, value: null, missing: missing };
+    var invested = 0, value = 0, bench = 0, pts = [], allFlows = [], asOfs = [];
+    items.forEach(function (it) {
+      invested += it.a.invested; value += it.a.value; bench += it.a.benchValue; asOfs.push(it.a.asOf);
+      it.a.flows.forEach(function (f) { pts.push({ t: dayNumber(f.date), a: -f.amount }); allFlows.push(f); });
+      pts.push({ t: dayNumber(it.a.asOf), a: it.a.value });
+    });
+    asOfs.sort();
+    var latest = asOfs[asOfs.length - 1], earliest = asOfs[0];
+    var firstDate = allFlows.length ? allFlows.map(function (f) { return f.date; }).sort()[0] : null;
+    var x = !allFlows.length ? null : value <= 0 ? (invested > 0 ? -1 : null) : solveXirr(pts);
+    var rows = items.map(function (it) {
+      return { name: it.sip.name, invested: it.a.invested, value: it.a.value, gain: it.a.gain, pct: it.a.pct, xirr: it.a.xirr,
+               share: value > 0 ? it.a.value / value * 100 : null };
+    });
+    var ranked = rows.filter(function (r) { return r.xirr !== null; }).sort(function (a, b) { return b.xirr - a.xirr; });
+    return { count: items.length, value: value, invested: invested, gain: value - invested,
+             pct: invested > 0 ? (value - invested) / invested * 100 : null, xirr: x,
+             years: firstDate ? (dayNumber(latest) - dayNumber(firstDate)) / 365 : 0,
+             asOf: latest, staleDays: dayNumber(latest) - dayNumber(earliest),
+             benchRate: items[0].a.benchRate, benchValue: bench, aheadBy: value - bench,
+             rows: rows, best: ranked.length > 1 ? ranked[0] : null, worst: ranked.length > 1 ? ranked[ranked.length - 1] : null,
+             largest: rows.length > 1 ? rows.slice().sort(function (a, b) { return b.value - a.value; })[0] : null,
+             missing: missing, cumulative: cumulativeByMonth(allFlows, latest) };
+  }
+
+  // Compact rupees for chart labels: 12.5L, 1.25Cr.
+  function short(n) {
+    var a = Math.abs(n), sign = n < 0 ? '-' : '';
+    function t(x) { return String(Math.round(x * 100) / 100); }
+    if (a >= 1e7) return sign + '\u20B9' + t(a / 1e7) + 'Cr';
+    if (a >= 1e5) return sign + '\u20B9' + t(a / 1e5) + 'L';
+    return rs(n);
+  }
+
+  function brief(name, a) {
+    if (a.value === null) return name + ': no value entered yet.';
+    return name + ': gain ' + rs(a.gain) + (a.pct === null ? '' : ' (' + pct1(a.pct) + ')') + (a.xirr === null ? '' : ', XIRR ' + pct1(a.xirr * 100)) + '.';
+  }
+
+  function portfolioLines(p) {
+    if (p.value === null) return [p.missing.length ? 'Type today\'s value on a SIP card to see all your SIPs together.' : 'No SIP added yet.'];
+    var out = [];
+    out.push('Right now your SIPs together are ' + (p.aheadBy >= 0 ? 'ahead of' : 'behind') + ' a ' + pct1(p.benchRate * 100) + ' a year benchmark by ' + rs(Math.abs(p.aheadBy)) + '.');
+    out.push('All SIPs together (' + plural(p.count, 'fund') + '): invested ' + rs(p.invested) + ', value ' + rs(p.value) + ', gain ' + rs(p.gain) + (p.pct === null ? '' : ' (' + pct1(p.pct) + ')') + '.');
+    out.push(p.xirr === null ? 'Combined XIRR could not be worked out.'
+      : 'Combined XIRR: ' + pct1(p.xirr * 100) + ' a year.' + (p.years < 1 ? ' Under a year of data, so treat it as rough.' : ''));
+    if (p.best) out.push('Strongest: ' + p.best.name + ' (XIRR ' + pct1(p.best.xirr * 100) + '). Weakest: ' + p.worst.name + ' (XIRR ' + pct1(p.worst.xirr * 100) + ').');
+    if (p.largest) out.push('Largest holding: ' + p.largest.name + ', ' + pct1(p.largest.share) + ' of the total value.');
+    if (p.missing.length) out.push('Not counted yet (no value entered): ' + p.missing.join(', ') + '.');
+    if (p.staleDays > 31) out.push('Your saved values are up to ' + plural(p.staleDays, 'day') + ' apart. Save fresh values for a cleaner picture.');
+    return out;
+  }
+
   // One row per saved value, with XIRR as it stood on that date.
   function growthLog(sip, snapshots) {
     return (snapshots || []).filter(function (s) { return s.sipId === sip.id; })
@@ -189,5 +264,6 @@
   return { validate: validate, parseFlows: parseFlows, parseSkipped: parseSkipped, schedule: schedule, monthlyNow: monthlyNow,
            xirr: xirr, benchmark: benchmark, costDrag: costDrag, consistency: consistency, project: project,
            analyze: analyze, projections: projections, lines: lines, growthLog: growthLog,
+           portfolio: portfolio, portfolioLines: portfolioLines, cumulativeByMonth: cumulativeByMonth, short: short, brief: brief,
            monthKey: monthKey, monthLabel: monthLabel, shortDate: shortDate, rs: rs, pct1: pct1 };
 });

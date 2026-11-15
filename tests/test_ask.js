@@ -126,4 +126,19 @@ test('sip: the definition still comes from the glossary', () => {
 test('sip questions do not disturb trading answers', () => {
   assert.strictEqual(ask('can i trade now', sipCtx()).intent, 'can_trade');
 });
+test('sip: several SIPs give the whole picture first, then one line each', () => {
+  const sips = [sipOf, { id: 'b', name: 'Flexi cap', amount: 500, day: 1, start: '2025-07' }];
+  const snaps = [{ sipId: 'a', date: '2025-12-31', value: 13000 }, { sipId: 'b', date: '2025-12-31', value: 3100 }];
+  const r = ask('how are all my sips doing', sipCtx({ sips, snapshots: snaps }));
+  assert.strictEqual(r.intent, 'sip');
+  const lines = r.text.split('\n');
+  assert.ok(lines[0].startsWith('Right now your SIPs together are'));
+  assert.ok(r.text.includes('All SIPs together (2 funds): invested \u20B915,000, value \u20B916,100') && r.text.includes('Combined XIRR'));
+  assert.ok(r.text.includes('Nifty index fund: gain \u20B91,000') && r.text.includes('Flexi cap: gain \u20B9100'));
+});
+test('sip: several SIPs, one without a value, says so', () => {
+  const sips = [sipOf, { id: 'b', name: 'Flexi cap', amount: 500, day: 1, start: '2025-07' }];
+  const r = ask('how is my sip doing', sipCtx({ sips, snapshots: [{ sipId: 'a', date: '2025-12-31', value: 13000 }] }));
+  assert.ok(r.text.includes('Not counted yet (no value entered): Flexi cap') && r.text.includes('Flexi cap: no value entered yet.'));
+});
 console.log(process.exitCode ? 'some tests failed' : 'all ' + n + ' ask tests pass');

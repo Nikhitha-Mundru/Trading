@@ -126,4 +126,62 @@ test('validate', () => {
 test('money formatting uses Indian grouping and signs', () => {
   assert.strictEqual(Sip.rs(1234567), '\u20B912,34,567'); assert.strictEqual(Sip.rs(-400), '-\u20B9400');
 });
+
+// ---- all SIPs together ----
+const A = sip({ id: 'A', name: 'Fund A', day: 1, start: '2025-01' });           // 12 x 1000 by 2025-12-31
+const B = sip({ id: 'B', name: 'Fund B', day: 1, start: '2025-07', amount: 500 }); // 6 x 500
+const snapA = { sipId: 'A', date: '2025-12-31', value: 13000 }, snapB = { sipId: 'B', date: '2025-12-31', value: 3100 };
+test('portfolio: totals add up by hand', () => {
+  const p = Sip.portfolio([A, B], [snapA, snapB]);
+  assert.deepStrictEqual([p.count, p.invested, p.value, p.gain], [2, 15000, 16100, 1100]);
+  near(p.pct, 1100 / 15000 * 100);
+});
+test('portfolio: combined XIRR equals XIRR of the merged payments', () => {
+  const p = Sip.portfolio([A, B], [snapA, snapB]);
+  const merged = Sip.schedule(A, '2025-12-31').concat(Sip.schedule(B, '2025-12-31'));
+  near(p.xirr, Sip.xirr(merged, 16100, '2025-12-31'), 1e-9);
+});
+test('portfolio: one SIP matches its own analysis', () => {
+  const p = Sip.portfolio([A], [snapA]), a = Sip.analyze(A, [snapA]);
+  near(p.xirr, a.xirr, 1e-9); near(p.value, a.value); assert.strictEqual(p.best, null);
+});
+test('portfolio: a SIP with no value is listed, not counted', () => {
+  const p = Sip.portfolio([A, B], [snapA]);
+  assert.deepStrictEqual([p.count, p.invested, p.missing], [1, 12000, ['Fund B']]);
+  assert.ok(Sip.portfolioLines(p).some(l => l.includes('Not counted yet') && l.includes('Fund B')));
+  assert.strictEqual(Sip.portfolio([A], []).value, null);
+  assert.ok(Sip.portfolioLines(Sip.portfolio([A], []))[0].includes('Type today'));
+  assert.ok(Sip.portfolioLines(Sip.portfolio([], []))[0].includes('No SIP added yet'));
+});
+test('portfolio: benchmark is the sum of each fund against the same rate', () => {
+  const p = Sip.portfolio([A, B], [snapA, snapB], { benchmarkRate: 0 });
+  near(p.benchValue, 15000); near(p.aheadBy, 1100);
+  const q = Sip.portfolio([A, B], [snapA, snapB]);
+  near(q.benchValue, Sip.analyze(A, [snapA]).benchValue + Sip.analyze(B, [snapB]).benchValue);
+});
+test('portfolio: strongest, weakest, largest, stale values', () => {
+  const p = Sip.portfolio([A, B], [snapA, { sipId: 'B', date: '2025-11-15', value: 2400 }]);
+  assert.strictEqual(p.best.name, 'Fund A'); assert.strictEqual(p.worst.name, 'Fund B'); assert.strictEqual(p.largest.name, 'Fund A');
+  assert.strictEqual(p.staleDays, 46);
+  const l = Sip.portfolioLines(p);
+  assert.ok(l.some(x => x.startsWith('Strongest: Fund A')) && l.some(x => x.includes('46 days apart')) && l.some(x => x.startsWith('Largest holding: Fund A')));
+});
+test('portfolio lines: verdict first, then totals and XIRR', () => {
+  const l = Sip.portfolioLines(Sip.portfolio([A, B], [snapA, snapB]));
+  assert.ok(l[0].startsWith('Right now your SIPs together are') && l[0].includes('7% a year benchmark'));
+  assert.ok(l[1].startsWith('All SIPs together (2 funds): invested \u20B915,000, value \u20B916,100, gain \u20B91,100 (7.3%)'));
+  assert.ok(l[2].startsWith('Combined XIRR') && l[2].includes('Under a year'));
+});
+test('cumulative by month fills quiet months and keeps a running total', () => {
+  const c = Sip.cumulativeByMonth([{ date: '2026-01-05', amount: 1000 }, { date: '2026-02-05', amount: 1000 }, { date: '2026-04-05', amount: 500 }], '2026-04-30');
+  assert.deepStrictEqual(c.map(r => [r.month, r.added, r.invested]), [['2026-01', 1000, 1000], ['2026-02', 1000, 2000], ['2026-03', 0, 2000], ['2026-04', 500, 2500]]);
+  assert.deepStrictEqual(Sip.cumulativeByMonth([], '2026-01-01'), []);
+  const p = Sip.portfolio([A, B], [snapA, snapB]);
+  assert.strictEqual(p.cumulative[p.cumulative.length - 1].invested, 15000); assert.strictEqual(p.cumulative[0].month, '2025-01');
+});
+test('short money labels and brief lines', () => {
+  assert.strictEqual(Sip.short(28000), '\u20B928,000'); assert.strictEqual(Sip.short(250000), '\u20B92.5L'); assert.strictEqual(Sip.short(12500000), '\u20B91.25Cr');
+  assert.ok(Sip.brief('Fund A', Sip.analyze(A, [snapA])).startsWith('Fund A: gain \u20B91,000 (8.3%), XIRR'));
+  assert.strictEqual(Sip.brief('Fund A', { value: null }), 'Fund A: no value entered yet.');
+});
 console.log(process.exitCode ? 'some tests failed' : 'all ' + n + ' sip tests pass');

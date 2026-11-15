@@ -73,6 +73,7 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--ink)}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 #answer{white-space:pre-wrap}
 .card .row{flex-wrap:wrap}
+.chart{width:100%;height:auto;display:block;margin:8px 0}
 .sipbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 details summary{cursor:pointer;min-height:40px;display:flex;align-items:center}
 .toast{position:fixed;left:18px;right:18px;bottom:calc(88px + env(safe-area-inset-bottom));background:var(--accent);color:var(--accent-ink);padding:12px 14px;border-radius:12px;display:none;font-weight:600}
@@ -356,7 +357,56 @@ details summary{cursor:pointer;min-height:40px;display:flex;align-items:center}
   function renderSip() {
     var list = $('sipList'); list.textContent = '';
     if (!P.sips.length) { var empty = el('div', 'card'); empty.appendChild(el('p', 'hint', 'No SIP yet. Add yours below.')); list.appendChild(empty); }
+    var pc = portfolioCard(); if (pc) list.appendChild(pc);
     P.sips.forEach(function (s) { list.appendChild(sipCard(s)); });
+  }
+
+  function drawGrowth(p) {
+    var NS = 'http://www.w3.org/2000/svg', W = 340, H = 156, L = 8, R = 88, T = 14, B = 24, cum = p.cumulative, n = cum.length;
+    var svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('class', 'chart'); svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', 'Money put in grows to ' + Sip.rs(p.invested) + '. Value now ' + Sip.rs(p.value) + '. The same payments at ' + Sip.pct1(p.benchRate * 100) + ' a year would be ' + Sip.rs(p.benchValue) + '.');
+    var max = Math.max(p.invested, p.value, p.benchValue) * 1.08 || 1, pw = W - L - R, ph = H - T - B;
+    function X(i) { return L + (n > 1 ? i / (n - 1) : 1) * pw; }
+    function Y(v) { return T + ph - Math.max(0, v) / max * ph; }
+    function mk(tag, attrs, text) {
+      var e = document.createElementNS(NS, tag);
+      Object.keys(attrs).forEach(function (k) { if (k === 'fill' || k === 'stroke') e.style[k] = attrs[k]; else e.setAttribute(k, attrs[k]); });
+      if (text) e.textContent = text; svg.appendChild(e); return e;
+    }
+    mk('line', { x1: L, x2: L + pw, y1: Y(0), y2: Y(0), stroke: 'var(--line)', 'stroke-width': 1 });
+    if (n > 1) mk('polyline', { points: cum.map(function (c, i) { return X(i) + ',' + Y(c.invested); }).join(' '), fill: 'none', stroke: 'var(--quiet)', 'stroke-width': 2, 'stroke-linejoin': 'round' });
+    var ex = X(n - 1), good = p.aheadBy >= 0, color = good ? 'var(--pass)' : 'var(--block)';
+    var yv = Y(p.value), yb = Y(p.benchValue);
+    if (Math.abs(yv - yb) < 13) { if (yv <= yb) yv = yb - 13; else yb = yv - 13; }
+    mk('circle', { cx: ex, cy: Y(p.benchValue), r: 4, fill: 'none', stroke: 'var(--quiet)', 'stroke-width': 1.5 });
+    mk('circle', { cx: ex, cy: Y(p.value), r: 5, fill: color, stroke: color });
+    mk('text', { x: ex + 9, y: yv + 4, fill: 'var(--ink)', 'font-size': 11, 'font-weight': 600 }, 'Now ' + Sip.short(p.value));
+    mk('text', { x: ex + 9, y: yb + 4, fill: 'var(--quiet)', 'font-size': 11 }, 'At ' + Sip.pct1(p.benchRate * 100) + ' ' + Sip.short(p.benchValue));
+    mk('text', { x: L, y: H - 6, fill: 'var(--quiet)', 'font-size': 10.5 }, Sip.monthLabel(cum[0].month));
+    mk('text', { x: L + pw, y: H - 6, fill: 'var(--quiet)', 'font-size': 10.5, 'text-anchor': 'end' }, Sip.monthLabel(cum[n - 1].month));
+    return svg;
+  }
+
+  function portfolioCard() {
+    var first = Sip.portfolio(P.sips, P.snapshots, {});
+    if (first.value === null) return null;
+    var card = el('div', 'card'), head = el('b', '', 'All SIPs together'), body = el('div'), rows = el('div'), chart = el('div');
+    var bench = numInput('7', 'any', 'Fixed yearly return to compare the whole with, in percent');
+    card.appendChild(head); card.appendChild(body); card.appendChild(chart);
+    card.appendChild(labelled('Compare with a fixed return (% a year)', bench)); card.appendChild(rows);
+    var refresh = function () {
+      var p = Sip.portfolio(P.sips, P.snapshots, { benchmarkRate: num(bench, 7) / 100 });
+      body.textContent = ''; Sip.portfolioLines(p).forEach(function (l, i) { body.appendChild(el('p', i === 0 ? 'neg' : '', l)); if (i === 0 && p.aheadBy >= 0) body.lastChild.className = 'pos'; });
+      chart.textContent = ''; chart.appendChild(drawGrowth(p));
+      chart.appendChild(el('p', 'hint', 'Grey line: money you put in. Filled dot: value now. Hollow dot: the same payments at the fixed return.'));
+      rows.textContent = '';
+      if (p.rows.length > 1) p.rows.forEach(function (r) {
+        var d = el('div', 'row'), left = el('div'); left.appendChild(el('b', '', r.name)); left.appendChild(el('div', 'hint', 'Invested ' + Sip.rs(r.invested) + ' of ' + Sip.rs(p.invested) + ', ' + Sip.pct1(r.share) + ' of the value'));
+        d.appendChild(left); d.appendChild(el('span', 't', Sip.rs(r.gain) + pctText(r.pct) + (r.xirr === null ? '' : ', XIRR ' + Sip.pct1(r.xirr * 100)))); rows.appendChild(d);
+      });
+    };
+    bench.oninput = refresh; refresh();
+    return card;
   }
 
   function sipCard(s) {

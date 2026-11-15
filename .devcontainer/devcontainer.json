@@ -1,0 +1,14 @@
+{
+  "name": "Trading agent",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "features": { "ghcr.io/devcontainers/features/node:1": { "version": "lts" } },
+  "postCreateCommand": "pip install -r requirements.txt",
+  "forwardPorts": [8000],
+  "portsAttributes": { "8000": { "label": "Gatekeeper page" } },
+  "customizations": {
+    "vscode": {
+      "extensions": ["GitHub.copilot", "GitHub.copilot-chat", "ms-python.python", "ms-python.vscode-pylance"],
+      "settings": { "python.testing.pytestEnabled": true, "python.testing.pytestArgs": ["tests"] }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "capital": 50000,
+  "max_loss_per_trade": 150,
+  "max_loss_per_day": 300,
+  "max_loss_per_week": 900,
+  "max_trades_per_day": 3,
+  "min_reward_risk": 2,
+  "entry_window": { "start": "09:30", "end": "11:30" },
+  "close_all_by": "11:45",
+  "max_consecutive_losses": 2,
+  "cooldown_minutes_after_loss": 15,
+  "watchlist_max": 3,
+  "real_money_segments": ["equity"],
+  "paper_only_segments": ["index_option", "stock_option", "futures"],
+  "option_segments": ["index_option", "stock_option"]
+}

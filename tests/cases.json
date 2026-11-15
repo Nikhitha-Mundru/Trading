@@ -1,0 +1,1015 @@
+[
+ {
+  "name": "clean trade passes",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": []
+ },
+ {
+  "name": "no morning check",
+  "state": {
+   "morning": null,
+   "trades": []
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "morning"
+  ]
+ },
+ {
+  "name": "morning check from yesterday",
+  "state": {
+   "morning": {
+    "date": "2026-11-13",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "morning"
+  ]
+ },
+ {
+  "name": "not rested",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": false,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "morning"
+  ]
+ },
+ {
+  "name": "watchlist too long",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "A",
+     "B",
+     "C",
+     "D"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "morning"
+  ]
+ },
+ {
+  "name": "too early 09:20",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 560,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "window"
+  ]
+ },
+ {
+  "name": "too late 11:31",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 691,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "window"
+  ]
+ },
+ {
+  "name": "exactly 11:30 is allowed",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 690,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": []
+ },
+ {
+  "name": "risk 200 is too big",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 100
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "risk"
+  ]
+ },
+ {
+  "name": "risk exactly 150 passes",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 75
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": []
+ },
+ {
+  "name": "reward vs risk 1.5",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 103,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "rr"
+  ]
+ },
+ {
+  "name": "stop above entry",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 102,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "budget",
+   "prices",
+   "risk",
+   "rr"
+  ]
+ },
+ {
+  "name": "short selling",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "sell",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "side"
+  ]
+ },
+ {
+  "name": "index option with real money",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "index_option",
+   "side": "buy",
+   "entry": 100,
+   "stop": 90,
+   "target": 120,
+   "qty": 15
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "segment"
+  ]
+ },
+ {
+  "name": "index option on paper",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "index_option",
+   "side": "buy",
+   "entry": 100,
+   "stop": 90,
+   "target": 120,
+   "qty": 15,
+   "paper": true
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": []
+ },
+ {
+  "name": "option on expiry day",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "stock_option",
+   "side": "buy",
+   "entry": 100,
+   "stop": 90,
+   "target": 120,
+   "qty": 15,
+   "paper": true,
+   "expiryDay": true
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "expiry"
+  ]
+ },
+ {
+  "name": "futures on paper",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": []
+  },
+  "trade": {
+   "segment": "futures",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50,
+   "paper": true
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": []
+ },
+ {
+  "name": "daily limit hit by two losses",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": [
+    {
+     "date": "2026-11-16",
+     "minutes": 560,
+     "pnl": -150,
+     "paper": false
+    },
+    {
+     "date": "2026-11-16",
+     "minutes": 570,
+     "pnl": -150,
+     "paper": false
+    }
+   ]
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "budget",
+   "daily",
+   "streak"
+  ]
+ },
+ {
+  "name": "cooldown after a loss",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": [
+    {
+     "date": "2026-11-16",
+     "minutes": 595,
+     "pnl": -100,
+     "paper": false
+    }
+   ]
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "cooldown"
+  ]
+ },
+ {
+  "name": "loss then win is fine",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": [
+    {
+     "date": "2026-11-16",
+     "minutes": 560,
+     "pnl": -50,
+     "paper": false
+    },
+    {
+     "date": "2026-11-16",
+     "minutes": 570,
+     "pnl": 100,
+     "paper": false
+    }
+   ]
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": []
+ },
+ {
+  "name": "two losses in a row",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": [
+    {
+     "date": "2026-11-16",
+     "minutes": 560,
+     "pnl": -50,
+     "paper": false
+    },
+    {
+     "date": "2026-11-16",
+     "minutes": 570,
+     "pnl": -50,
+     "paper": false
+    }
+   ]
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "streak"
+  ]
+ },
+ {
+  "name": "three trades used",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": [
+    {
+     "date": "2026-11-16",
+     "minutes": 560,
+     "pnl": 50,
+     "paper": false
+    },
+    {
+     "date": "2026-11-16",
+     "minutes": 570,
+     "pnl": 50,
+     "paper": false
+    },
+    {
+     "date": "2026-11-16",
+     "minutes": 580,
+     "pnl": 50,
+     "paper": false
+    }
+   ]
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "count"
+  ]
+ },
+ {
+  "name": "budget left exactly equals risk",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": [
+    {
+     "date": "2026-11-16",
+     "minutes": 560,
+     "pnl": -200,
+     "paper": false
+    }
+   ]
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": []
+ },
+ {
+  "name": "risk above remaining budget",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": [
+    {
+     "date": "2026-11-16",
+     "minutes": 560,
+     "pnl": -200,
+     "paper": false
+    }
+   ]
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 75
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "budget"
+  ]
+ },
+ {
+  "name": "yesterday does not count today",
+  "state": {
+   "morning": {
+    "date": "2026-11-17",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": [
+    {
+     "date": "2026-11-15",
+     "minutes": 560,
+     "pnl": -300,
+     "paper": false
+    }
+   ]
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-17",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": []
+ },
+ {
+  "name": "weekly limit hit",
+  "state": {
+   "morning": {
+    "date": "2026-11-19",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": [
+    {
+     "date": "2026-11-16",
+     "minutes": 560,
+     "pnl": -500,
+     "paper": false
+    },
+    {
+     "date": "2026-11-17",
+     "minutes": 560,
+     "pnl": -400,
+     "paper": false
+    }
+   ]
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-19",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": [
+   "week"
+  ]
+ },
+ {
+  "name": "last week does not count",
+  "state": {
+   "morning": {
+    "date": "2026-11-23",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": [
+    {
+     "date": "2026-11-17",
+     "minutes": 560,
+     "pnl": -900,
+     "paper": false
+    }
+   ]
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-23",
+   "minutes": 600,
+   "weekStart": "2026-11-23"
+  },
+  "expectFailed": []
+ },
+ {
+  "name": "paper trade ignores real limits",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": [
+    {
+     "date": "2026-11-16",
+     "minutes": 560,
+     "pnl": -150,
+     "paper": false
+    },
+    {
+     "date": "2026-11-16",
+     "minutes": 570,
+     "pnl": -150,
+     "paper": false
+    }
+   ]
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50,
+   "paper": true
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": []
+ },
+ {
+  "name": "paper losses do not count",
+  "state": {
+   "morning": {
+    "date": "2026-11-16",
+    "slept": true,
+    "calm": true,
+    "watchlist": [
+     "INFY",
+     "SBIN"
+    ]
+   },
+   "trades": [
+    {
+     "date": "2026-11-16",
+     "minutes": 560,
+     "pnl": -150,
+     "paper": true
+    },
+    {
+     "date": "2026-11-16",
+     "minutes": 570,
+     "pnl": -150,
+     "paper": true
+    }
+   ]
+  },
+  "trade": {
+   "segment": "equity",
+   "side": "buy",
+   "entry": 100,
+   "stop": 98,
+   "target": 104,
+   "qty": 50
+  },
+  "now": {
+   "date": "2026-11-16",
+   "minutes": 600,
+   "weekStart": "2026-11-16"
+  },
+  "expectFailed": []
+ }
+]

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16212C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Gatekeeper">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Gatekeeper</title>
+<style>
+:root{
+  --bg:#EEF1F4; --card:#FFFFFF; --ink:#16212C; --quiet:#5A6773; --line:#D5DBE1;
+  --pass:#1B7F4B; --pass-bg:#E3F3EA; --block:#B42318; --block-bg:#FBE9E7; --accent:#16212C; --accent-ink:#FFFFFF;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0F1720; --card:#18222D; --ink:#E8EDF2; --quiet:#9AA7B4; --line:#2B3947;
+    --pass:#4CC38A; --pass-bg:#12301F; --block:#FF8A7D; --block-bg:#3A1A17; --accent:#E8EDF2; --accent-ink:#0F1720; }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%}
+body{min-height:100vh;padding:env(safe-area-inset-top) 0 calc(76px + env(safe-area-inset-bottom))}
+header{display:flex;justify-content:space-between;align-items:baseline;padding:14px 18px 6px}
+header h1{font-size:22px;margin:0;letter-spacing:-.01em}
+#clock{color:var(--quiet);font-variant-numeric:tabular-nums}
+.strip{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px 18px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.stat b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12.5px;color:var(--quiet)}
+.stat.bad b{color:var(--block)}
+#banner{margin:6px 18px 0;padding:10px 12px;border-radius:10px;background:var(--block-bg);color:var(--block);font-weight:600;display:none}
+#banner.info{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+main{padding:8px 18px}
+section{display:none}
+section.on{display:block}
+h2{font-size:19px;margin:14px 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
+label{display:block;font-size:14px;color:var(--quiet);margin:10px 0 4px}
+input[type=text],input[type=number],input[type=time],select,textarea{width:100%;min-height:46px;font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+textarea{min-height:120px;font-size:13px;font-family:ui-monospace,Menlo,monospace}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.check{display:flex;align-items:center;gap:12px;min-height:46px;color:var(--ink);font-size:16px;margin:4px 0}
+.check input{width:24px;height:24px;flex:none}
+button{font:inherit;font-weight:600;min-height:48px;padding:0 18px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button.main{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);width:100%;margin-top:14px}
+button.small{min-height:40px;padding:0 12px;font-size:14px}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.hint{color:var(--quiet);font-size:14px;margin:8px 0 0}
+.preview{font-variant-numeric:tabular-nums;margin-top:12px;font-weight:600}
+#verdict{display:none;border-radius:16px;padding:16px;margin:14px 0}
+#verdict.pass{display:block;background:var(--pass-bg);border:2px solid var(--pass)}
+#verdict.blocked{display:block;background:var(--block-bg);border:2px solid var(--block)}
+#verdict h3{margin:0 0 8px;font-size:40px;letter-spacing:.01em;line-height:1}
+#verdict.pass h3{color:var(--pass)}
+#verdict.blocked h3{color:var(--block)}
+#verdict ul{list-style:none;margin:0;padding:0}
+#verdict li{padding:6px 0;border-top:1px solid var(--line);display:flex;gap:10px}
+#verdict li .m{flex:none;width:20px;font-weight:700}
+#verdict li.ok{color:var(--quiet)}
+#verdict li.no{font-weight:600}
+#verdict li.no .m{color:var(--block)}
+#verdict li.ok .m{color:var(--pass)}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row .t{font-variant-numeric:tabular-nums}
+.row input{width:96px;min-height:40px}
+.neg{color:var(--block)} .pos{color:var(--pass)}
+nav{position:fixed;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(3,1fr);background:var(--card);border-top:1px solid var(--line);padding:6px 10px calc(6px + env(safe-area-inset-bottom));gap:6px}
+nav button{border:0;background:transparent;min-height:52px;color:var(--quiet)}
+nav button[aria-selected=true]{background:var(--bg);color:var(--ink)}
+.toast{position:fixed;left:18px;right:18px;bottom:calc(88px + env(safe-area-inset-bottom));background:var(--accent);color:var(--accent-ink);padding:12px 14px;border-radius:12px;display:none;font-weight:600}
+@media (prefers-reduced-motion:no-preference){ #verdict{transition:none} }
+</style>
+</head>
+<body>
+<header><h1>Gatekeeper</h1><span id="clock" aria-live="off"></span></header>
+<div class="strip" id="strip"></div>
+<div id="banner" role="status"></div>
+<main>
+  <section id="tab-morning" class="on" aria-label="Morning check">
+    <h2>Morning check</h2>
+    <div class="card" id="morningDone" style="display:none"></div>
+    <div class="card" id="morningForm">
+      <label class="check"><input type="checkbox" id="slept"> I slept well</label>
+      <label class="check"><input type="checkbox" id="calm"> I feel calm</label>
+      <label for="watch">Watchlist (up to 3 symbols, comma separated)</label>
+      <input type="text" id="watch" autocapitalize="characters" autocomplete="off" placeholder="INFY, SBIN, ITC">
+      <p class="hint">If either box is unticked, trading is blocked for the whole day. That is the rule working.</p>
+      <button class="main" id="saveMorning">Save morning check</button>
+    </div>
+  </section>
+
+  <section id="tab-check" aria-label="Trade check">
+    <h2>Trade check</h2>
+    <div class="card">
+      <label for="segment">Segment</label>
+      <select id="segment">
+        <option value="equity">Equity intraday (real money allowed)</option>
+        <option value="index_option">Nifty / BankNifty option (paper only)</option>
+        <option value="stock_option">Stock option (paper only)</option>
+        <option value="futures">Futures (paper only)</option>
+      </select>
+      <label for="side">Side</label>
+      <select id="side"><option value="buy">Buy</option><option value="sell">Sell</option></select>
+      <div class="grid2">
+        <div><label for="entry">Entry price</label><input type="number" id="entry" inputmode="decimal" step="any"></div>
+        <div><label for="stop">Stop price</label><input type="number" id="stop" inputmode="decimal" step="any"></div>
+        <div><label for="target">Target price</label><input type="number" id="target" inputmode="decimal" step="any"></div>
+        <div><label for="qty">Quantity (lot x lot size)</label><input type="number" id="qty" inputmode="numeric" step="1"></div>
+      </div>
+      <label class="check"><input type="checkbox" id="paper"> Paper trade (no real money)</label>
+      <label class="check" id="expiryRow" style="display:none"><input type="checkbox" id="expiry"> Today is this contract's expiry day</label>
+      <div class="preview" id="preview"></div>
+      <button class="main" id="runCheck">Check trade</button>
+    </div>
+    <div id="verdict" role="status"></div>
+    <div id="takeRow" style="display:none"><button class="main" id="take">I took this trade</button></div>
+    <details class="card"><summary>Practice mode: set the time yourself</summary>
+      <label for="ptime">Pretend it is (IST)</label>
+      <input type="time" id="ptime">
+      <p class="hint">Use this in the evening to practise. Clear it before the market opens.</p>
+    </details>
+  </section>
+
+  <section id="tab-journal" aria-label="Journal">
+    <h2>Today</h2>
+    <div class="card" id="todayList"></div>
+    <h2>Blocked today</h2>
+    <div class="card" id="blockedList"></div>
+    <h2>Export</h2>
+    <div class="card">
+      <button class="small" id="makeCsv">Build CSV</button>
+      <button class="small" id="copyCsv">Copy</button>
+      <textarea id="csv" readonly aria-label="CSV export"></textarea>
+      <p class="hint">Back up here weekly. Phone storage can be cleared by iOS if you delete the app.</p>
+      <button class="small" id="wipe">Delete all data</button>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast" role="status"></div>
+<nav aria-label="Sections">
+  <button data-tab="morning" aria-selected="true">Morning</button>
+  <button data-tab="check" aria-selected="false">Check</button>
+  <button data-tab="journal" aria-selected="false">Journal</button>
+</nav>
+<script src="gatekeeper.js"></script>
+<script>
+(function () {
+  var G = window.Gatekeeper, KEY = 'gk_v1', RULES = null;
+  var $ = function (id) { return document.getElementById(id); };
+  var S = load(), lastPass = null;
+
+  function load() {
+    try { var j = JSON.parse(localStorage.getItem(KEY)); if (j && j.trades) return j; } catch (e) {}
+    return { morning: null, trades: [], blocked: [] };
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Could not save. Storage is full or blocked.'); } }
+  function toast(msg) { var t = $('toast'); t.textContent = msg; t.style.display = 'block'; setTimeout(function () { t.style.display = 'none'; }, 2600); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  function nowIST() {
+    var f = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+    var p = {}; f.formatToParts(new Date()).forEach(function (x) { p[x.type] = x.value; });
+    var minutes = (Number(p.hour) % 24) * 60 + Number(p.minute);
+    var ov = $('ptime').value; if (ov) minutes = G.toMin(ov);
+    var d = new Date(Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day)));
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    return { date: p.year + '-' + p.month + '-' + p.day, minutes: minutes, weekStart: d.toISOString().slice(0, 10), practice: !!ov };
+  }
+  function rs(n) { return '\u20B9' + (Math.round(n * 100) / 100); }
+
+  function render() {
+    if (!RULES) return;
+    var now = nowIST(), s = G.summarize(S.trades, now);
+    $('clock').textContent = (now.practice ? 'practice ' : '') + G.clock(now.minutes) + ' IST';
+    var strip = $('strip'); strip.textContent = '';
+    [[rs(s.netToday), 'Today, limit -' + rs(RULES.max_loss_per_day), s.netToday <= -RULES.max_loss_per_day],
+     [s.count + ' / ' + RULES.max_trades_per_day, 'Real trades today', s.count >= RULES.max_trades_per_day],
+     [rs(s.netWeek), 'Week, limit -' + rs(RULES.max_loss_per_week), s.netWeek <= -RULES.max_loss_per_week]
+    ].forEach(function (c) { var d = el('div', 'stat' + (c[2] ? ' bad' : '')); d.appendChild(el('b', '', c[0])); d.appendChild(el('span', '', c[1])); strip.appendChild(d); });
+
+    var b = $('banner'), msg = '', info = false;
+    var m = S.morning, mOk = m && m.date === now.date && m.slept && m.calm;
+    if (s.netWeek <= -RULES.max_loss_per_week) msg = 'Weekly limit reached. No trading until Monday.';
+    else if (s.netToday <= -RULES.max_loss_per_day) msg = 'Daily limit reached. Stop and close the app.';
+    else if (m && m.date === now.date && !mOk) msg = 'Not rested and calm. No trading today.';
+    else if (!m || m.date !== now.date) { msg = 'Do the morning check before any trade.'; info = true; }
+    else if (now.minutes >= G.toMin(RULES.close_all_by) && now.minutes <= 12 * 60) msg = 'Close every position now. Cut-off was ' + RULES.close_all_by + '.';
+    b.style.display = msg ? 'block' : 'none'; b.textContent = msg; b.className = info ? 'info' : '';
+
+    var done = $('morningDone'), form = $('morningForm');
+    if (m && m.date === now.date) {
+      done.style.display = 'block'; form.style.display = 'none'; done.textContent = '';
+      done.appendChild(el('b', '', mOk ? 'Morning check passed.' : 'Morning check failed. No trading today.'));
+      done.appendChild(el('p', 'hint', 'Watchlist: ' + (m.watchlist.length ? m.watchlist.join(', ') : 'none')));
+      var redo = el('button', 'small', 'Redo'); redo.onclick = function () { S.morning = null; save(); render(); }; done.appendChild(redo);
+    } else { done.style.display = 'none'; form.style.display = 'block'; }
+    renderJournal(now);
+    preview();
+  }
+
+  function renderJournal(now) {
+    var tl = $('todayList'); tl.textContent = '';
+    var todays = S.trades.filter(function (t) { return t.date === now.date; });
+    if (!todays.length) tl.appendChild(el('p', 'hint', 'No trades yet today. Run a check on the Check tab.'));
+    todays.forEach(function (t) {
+      var r = el('div', 'row'), left = el('div');
+      left.appendChild(el('b', '', t.segment.replace('_', ' ') + (t.paper ? ' (paper)' : '')));
+      left.appendChild(el('div', 'hint t', G.clock(t.minutes) + '  entry ' + t.entry + ', stop ' + t.stop + ', target ' + t.target + ', qty ' + t.qty + ', risk ' + rs(t.risk)));
+      var right = el('div'), inp = el('input'); inp.type = 'number'; inp.inputMode = 'decimal'; inp.step = 'any'; inp.placeholder = 'P&L'; inp.setAttribute('aria-label', 'Result in rupees after charges');
+      if (typeof t.pnl === 'number') inp.value = t.pnl;
+      var sv = el('button', 'small', 'Save'); sv.onclick = function () { var v = inp.value === '' ? null : Number(inp.value); if (v !== null && !isFinite(v)) return; t.pnl = v; save(); render(); toast('Result saved.'); };
+      right.appendChild(inp); right.appendChild(sv); r.appendChild(left); r.appendChild(right); tl.appendChild(r);
+    });
+    var bl = $('blockedList'); bl.textContent = '';
+    var bs = S.blocked.filter(function (x) { return x.date === now.date; });
+    if (!bs.length) bl.appendChild(el('p', 'hint', 'Nothing blocked today.'));
+    bs.forEach(function (x) { var r = el('div', 'row'), d = el('div'); d.appendChild(el('b', '', G.clock(x.minutes) + '  ' + x.segment.replace('_', ' '))); d.appendChild(el('div', 'hint', x.reasons.join(' ') )); r.appendChild(d); bl.appendChild(r); });
+  }
+
+  function readTrade() {
+    var seg = $('segment').value;
+    return { segment: seg, side: $('side').value, entry: Number($('entry').value), stop: Number($('stop').value), target: Number($('target').value), qty: Number($('qty').value), paper: $('paper').checked, expiryDay: $('expiry').checked };
+  }
+  function preview() {
+    var t = readTrade(), p = $('preview');
+    if (t.entry > 0 && t.stop > 0 && t.target > 0 && t.qty > 0 && t.stop < t.entry && t.entry < t.target) {
+      var risk = (t.entry - t.stop) * t.qty, rew = (t.target - t.entry) * t.qty;
+      p.textContent = 'Risk ' + rs(risk) + '  Reward ' + rs(rew) + '  Ratio ' + (Math.round(rew / risk * 100) / 100) + ' to 1';
+    } else p.textContent = 'Enter entry, stop, target and quantity.';
+  }
+  function segChange() {
+    var seg = $('segment').value, real = RULES && RULES.real_money_segments.indexOf(seg) >= 0;
+    $('paper').checked = real ? $('paper').checked : true; $('paper').disabled = !real;
+    $('expiryRow').style.display = RULES && RULES.option_segments.indexOf(seg) >= 0 ? 'flex' : 'none';
+    preview();
+  }
+
+  function runCheck() {
+    var now = nowIST(), t = readTrade(), res = G.evaluate(RULES, S, t, now), v = $('verdict');
+    v.textContent = ''; v.className = res.pass ? 'pass' : 'blocked';
+    v.appendChild(el('h3', '', res.pass ? 'PASS' : 'BLOCKED'));
+    var ul = el('ul'), sorted = res.results.slice().sort(function (a, b) { return a.ok - b.ok; });
+    sorted.forEach(function (r) { var li = el('li', r.ok ? 'ok' : 'no'); li.appendChild(el('span', 'm', r.ok ? '\u2713' : '\u2715')); li.appendChild(el('span', '', r.label + ': ' + r.reason)); ul.appendChild(li); });
+    v.appendChild(ul);
+    $('takeRow').style.display = res.pass ? 'block' : 'none';
+    if (res.pass) lastPass = { t: t, risk: res.risk, minutes: now.minutes, date: now.date };
+    else {
+      lastPass = null;
+      var rec = { date: now.date, minutes: now.minutes, segment: t.segment, paper: t.paper, trade: t, reasons: res.results.filter(function (r) { return !r.ok; }).map(function (r) { return r.reason; }) };
+      var last = S.blocked[S.blocked.length - 1];
+      if (!last || JSON.stringify(last.trade) !== JSON.stringify(rec.trade) || last.minutes !== rec.minutes) { S.blocked.push(rec); save(); }
+    }
+    v.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    render();
+  }
+
+  function take() {
+    if (!lastPass) return;
+    var t = lastPass.t;
+    S.trades.push({ date: lastPass.date, minutes: lastPass.minutes, segment: t.segment, paper: t.paper, entry: t.entry, stop: t.stop, target: t.target, qty: t.qty, risk: lastPass.risk, pnl: null });
+    save(); lastPass = null; $('takeRow').style.display = 'none'; $('verdict').className = '';
+    toast('Logged. Place the order yourself, then add the result in Journal.'); render();
+  }
+
+  function csvq(x) { return '"' + String(x).replace(/"/g, '""') + '"'; }
+  function buildCsv() {
+    var rows = ['TRADES', 'date,time,segment,paper,entry,stop,target,qty,risk,pnl'];
+    S.trades.forEach(function (t) { rows.push([t.date, G.clock(t.minutes), t.segment, t.paper, t.entry, t.stop, t.target, t.qty, t.risk, t.pnl == null ? '' : t.pnl].join(',')); });
+    rows.push('', 'BLOCKED', 'date,time,segment,reasons');
+    S.blocked.forEach(function (x) { rows.push([x.date, G.clock(x.minutes), x.segment, csvq(x.reasons.join(' | '))].join(',')); });
+    $('csv').value = rows.join('\n');
+  }
+
+  document.querySelectorAll('nav button').forEach(function (b) {
+    b.onclick = function () {
+      document.querySelectorAll('nav button').forEach(function (x) { x.setAttribute('aria-selected', x === b ? 'true' : 'false'); });
+      document.querySelectorAll('section').forEach(function (s) { s.classList.toggle('on', s.id === 'tab-' + b.dataset.tab); });
+      window.scrollTo(0, 0);
+    };
+  });
+  $('saveMorning').onclick = function () {
+    var wl = $('watch').value.split(',').map(function (x) { return x.trim().toUpperCase(); }).filter(Boolean);
+    S.morning = { date: nowIST().date, slept: $('slept').checked, calm: $('calm').checked, watchlist: wl };
+    save(); render();
+    if (wl.length > RULES.watchlist_max) toast('Watchlist is over ' + RULES.watchlist_max + '. Trades will be blocked until you redo it.');
+  };
+  $('runCheck').onclick = runCheck; $('take').onclick = take; $('segment').onchange = segChange;
+  ['entry', 'stop', 'target', 'qty', 'side', 'paper', 'expiry'].forEach(function (id) { $(id).oninput = preview; $(id).onchange = preview; });
+  $('ptime').onchange = render;
+  $('makeCsv').onclick = buildCsv;
+  $('copyCsv').onclick = function () { buildCsv(); var c = $('csv'); c.select(); try { (navigator.clipboard ? navigator.clipboard.writeText(c.value) : Promise.reject()).then(function () { toast('Copied.'); }, function () { document.execCommand('copy'); toast('Copied.'); }); } catch (e) { toast('Select the text and copy it.'); } };
+  $('wipe').onclick = function () { if (confirm('Delete every trade, blocked trade and morning check on this phone?')) { S = { morning: null, trades: [], blocked: [] }; save(); render(); } };
+
+  fetch('rules.json', { cache: 'no-cache' }).then(function (r) { return r.json(); }).then(function (j) {
+    RULES = j; segChange(); render(); setInterval(render, 30000);
+  }).catch(function () {
+    var b = $('banner'); b.style.display = 'block'; b.textContent = 'Could not load rules.json. Open this page from GitHub Pages, not from a file.';
+  });
+  if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('sw.js'); } catch (e) {} }
+})();
+</script>
+</body>
+</html>

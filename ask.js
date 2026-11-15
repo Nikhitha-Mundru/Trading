@@ -1,9 +1,9 @@
 // "Ask anytime": answers from your own rules, today's state and journal. No AI, no internet.
 // Works in the browser (window.Ask) and in Node (require).
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./gatekeeper.js'));
-  else root.Ask = factory(root.Gatekeeper);
-})(typeof self !== 'undefined' ? self : this, function (G) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./gatekeeper.js'), require('./sip.js'));
+  else root.Ask = factory(root.Gatekeeper, root.Sip);
+})(typeof self !== 'undefined' ? self : this, function (G, S) {
   function rs(n) { return '\u20B9' + (Math.round(n * 100) / 100); }
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
   function esc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
@@ -131,11 +131,21 @@
     if (!hits.length) hits = TOPICS;
     return hits.map(function (t) { return t.text(ctx.rules); }).join('\n');
   }
+  function sipAnswer(ctx) {
+    var d = ctx.sipData;
+    if (!S || !d || !d.sips || !d.sips.length) return 'No SIP is set up yet. Add your SIP on the SIP tab.';
+    var out = d.sips.map(function (sip) {
+      var l = S.lines(S.analyze(sip, d.snapshots || [], {}));
+      return sip.name + ': ' + l.slice(0, 4).join(' ');
+    });
+    return out.join('\n') + '\nSIPs sit outside your trading limits.';
+  }
   function help() {
-    return 'I can answer from your own rules and journal. Try: "Can I trade now?", "How much can I risk?", "Today\'s P&L", "What are my rules?", "Why was I blocked?", "How am I doing?", "What is VWAP?", or "How many shares entry 100 stop 98".';
+    return 'I can answer from your own rules and journal. Try: "Can I trade now?", "How is my SIP doing?", "How much can I risk?", "Today\'s P&L", "What are my rules?", "Why was I blocked?", "How am I doing?", "What is VWAP?", or "How many shares entry 100 stop 98".';
   }
 
   var INTENTS = [
+    { id: 'sip', rx: [/\bsips?\b|mutual funds?|xirr/], run: sipAnswer },
     { id: 'can_trade', rx: [/can i (trade|take|enter|buy)|another trade|allowed to trade|should i trade|am i (allowed|done)|trade now|\bokay to\b/], run: canTrade },
     { id: 'risk', rx: [/how much (can|could|should) i risk|risk (left|now)|budget|room left|how much (is )?left/], run: risk },
     { id: 'status', rx: [/p ?& ?l|pnl|profit|how much (have i|did i) (lose|lost|make|made)|lost today|made today|today|this week|so far|loss so far/], run: status },

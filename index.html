@@ -38,7 +38,7 @@ section.on{display:block}
 h2{font-size:19px;margin:14px 0 8px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
 label{display:block;font-size:14px;color:var(--quiet);margin:10px 0 4px}
-input[type=text],input[type=number],input[type=time],select,textarea{width:100%;min-height:46px;font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+input[type=text],input[type=number],input[type=time],input[type=month],select,textarea{width:100%;min-height:46px;font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
 textarea{min-height:120px;font-size:13px;font-family:ui-monospace,Menlo,monospace}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .check{display:flex;align-items:center;gap:12px;min-height:46px;color:var(--ink);font-size:16px;margin:4px 0}
@@ -67,11 +67,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .row .t{font-variant-numeric:tabular-nums}
 .row input{width:96px;min-height:40px}
 .neg{color:var(--block)} .pos{color:var(--pass)}
-nav{position:fixed;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(4,1fr);background:var(--card);border-top:1px solid var(--line);padding:6px 10px calc(6px + env(safe-area-inset-bottom));gap:6px}
-nav button{border:0;background:transparent;min-height:52px;color:var(--quiet)}
+nav{position:fixed;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(5,1fr);background:var(--card);border-top:1px solid var(--line);padding:6px 10px calc(6px + env(safe-area-inset-bottom));gap:6px}
+nav button{border:0;background:transparent;min-height:52px;color:var(--quiet);padding:0 2px;font-size:14px}
 nav button[aria-selected=true]{background:var(--bg);color:var(--ink)}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 #answer{white-space:pre-wrap}
+.card .row{flex-wrap:wrap}
+.sipbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+details summary{cursor:pointer;min-height:40px;display:flex;align-items:center}
 .toast{position:fixed;left:18px;right:18px;bottom:calc(88px + env(safe-area-inset-bottom));background:var(--accent);color:var(--accent-ink);padding:12px 14px;border-radius:12px;display:none;font-weight:600}
 @media (prefers-reduced-motion:no-preference){ #verdict{transition:none} }
 </style>
@@ -151,6 +154,35 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--ink)}
     <div class="card" id="answer" style="display:none" role="status"></div>
     <p class="hint">Answers come from your own rules and journal on this phone. No AI, no internet.</p>
   </section>
+
+  <section id="tab-sip" aria-label="SIP analysis">
+    <h2>SIP analysis</h2>
+    <p class="hint">Analyses your existing mutual fund SIP from the numbers you type in. No reminders, no prices fetched, no AI. SIPs sit outside your trading limits.</p>
+    <div id="sipList"></div>
+    <h2>Add your SIP</h2>
+    <div class="card">
+      <label for="sipName">Fund name</label>
+      <input type="text" id="sipName" autocomplete="off" placeholder="Nifty 50 index fund">
+      <div class="grid2">
+        <div><label for="sipAmount">Monthly amount</label><input type="number" id="sipAmount" inputmode="decimal" step="any"></div>
+        <div><label for="sipDay">Day of month (1 to 28)</label><input type="number" id="sipDay" inputmode="numeric" step="1" min="1" max="28"></div>
+        <div><label for="sipStart">Month you started</label><input type="month" id="sipStart"></div>
+        <div><label for="sipStep">Yearly step-up % (optional)</label><input type="number" id="sipStep" inputmode="decimal" step="any"></div>
+      </div>
+      <label for="sipSkipped">Months you skipped (optional)</label>
+      <input type="text" id="sipSkipped" autocomplete="off" placeholder="2025-03, 2025-04">
+      <label for="sipFlows">Or paste your transactions (optional, overrides the above)</label>
+      <textarea id="sipFlows" placeholder="2025-01-05, 2000&#10;2025-02-05, 2000"></textarea>
+      <p class="hint">Pasted lines give the most accurate result. One per line: date, then amount. Dates like 2025-01-05 or 05-01-2025 both work.</p>
+      <button class="main" id="sipAdd">Add SIP</button>
+    </div>
+    <h2>Export</h2>
+    <div class="card">
+      <button class="small" id="sipCsv">Build CSV</button>
+      <button class="small" id="sipCopy">Copy</button>
+      <textarea id="sipOut" readonly aria-label="SIP CSV export"></textarea>
+    </div>
+  </section>
 </main>
 <div class="toast" id="toast" role="status"></div>
 <nav aria-label="Sections">
@@ -158,8 +190,10 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--ink)}
   <button data-tab="check" aria-selected="false">Check</button>
   <button data-tab="journal" aria-selected="false">Journal</button>
   <button data-tab="ask" aria-selected="false">Ask</button>
+  <button data-tab="sip" aria-selected="false">SIP</button>
 </nav>
 <script src="gatekeeper.js"></script>
+<script src="sip.js"></script>
 <script src="ask.js"></script>
 <script>
 (function () {
@@ -309,10 +343,109 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--ink)}
   $('copyCsv').onclick = function () { buildCsv(); var c = $('csv'); c.select(); try { (navigator.clipboard ? navigator.clipboard.writeText(c.value) : Promise.reject()).then(function () { toast('Copied.'); }, function () { document.execCommand('copy'); toast('Copied.'); }); } catch (e) { toast('Select the text and copy it.'); } };
   $('wipe').onclick = function () { if (confirm('Delete every trade, blocked trade and morning check on this phone?')) { S = { morning: null, trades: [], blocked: [] }; save(); render(); } };
 
+  // ----- SIP analysis: its own storage key, never read by the trading rules -----
+  var SK = 'gk_sip_v2', P = loadSip(), fieldN = 0;
+  function loadSip() { try { var j = JSON.parse(localStorage.getItem(SK)); if (j && j.sips) return j; } catch (e) {} return { sips: [], snapshots: [] }; }
+  function saveSip() { try { localStorage.setItem(SK, JSON.stringify(P)); } catch (e) { toast('Could not save SIP data. Storage is full or blocked.'); } }
+  function today() { return nowIST().date; }
+  function pctText(n) { return n === null ? '' : ' (' + Sip.pct1(n) + ')'; }
+  function numInput(value, step, label) { var i = el('input'); i.type = 'number'; i.inputMode = 'decimal'; i.step = step || 'any'; i.value = value; i.setAttribute('aria-label', label); return i; }
+  function labelled(text, input) { input.id = 'sf' + (++fieldN); var w = el('div'), l = el('label', '', text); l.htmlFor = input.id; w.appendChild(l); w.appendChild(input); return w; }
+  function num(i, fallback) { var v = Number(i.value); return i.value === '' || !isFinite(v) ? fallback : v; }
+
+  function renderSip() {
+    var list = $('sipList'); list.textContent = '';
+    if (!P.sips.length) { var empty = el('div', 'card'); empty.appendChild(el('p', 'hint', 'No SIP yet. Add yours below.')); list.appendChild(empty); }
+    P.sips.forEach(function (s) { list.appendChild(sipCard(s)); });
+  }
+
+  function sipCard(s) {
+    var card = el('div', 'card'), t = today();
+    card.appendChild(el('b', '', s.name));
+    card.appendChild(el('div', 'hint', s.flows && s.flows.length ? s.flows.length + ' transactions you pasted'
+      : Sip.rs(s.amount) + ' on day ' + s.day + ' from ' + Sip.monthLabel(s.start) + (s.stepUp ? ', stepping up ' + s.stepUp + '% a year' : '') + (s.skipped && s.skipped.length ? ', ' + s.skipped.length + ' skipped months' : '')));
+
+    var val = numInput('', 'any', 'Current value from your fund app'); val.placeholder = 'Value today';
+    var save = el('button', 'small', 'Save value'), vrow = el('div', 'sipbtns');
+    vrow.appendChild(val); vrow.appendChild(save); card.appendChild(vrow);
+    save.onclick = function () {
+      var v = Number(val.value); if (val.value === '' || !isFinite(v) || v < 0) { toast('Type the current value from your fund app.'); return; }
+      P.snapshots.push({ sipId: s.id, date: t, value: v }); saveSip(); renderSip(); toast('Value saved.');
+    };
+
+    var a0 = Sip.analyze(s, P.snapshots, {});
+    if (a0.value === null) card.appendChild(el('p', 'hint', Sip.lines(a0)[0]));
+    else {
+      var stats = el('div'), proj = el('div');
+      var bench = numInput('7', 'any', 'Fixed yearly return to compare with, in percent'), direct = numInput('', 'any', 'Yearly saving of a direct plan, in percent');
+      var years = numInput('10', '1', 'Years to project'), step = numInput(s.stepUp || 0, 'any', 'Yearly increase of the SIP, in percent');
+      var ctl = el('div', 'grid2');
+      ctl.appendChild(labelled('Compare with a fixed return (% a year)', bench)); ctl.appendChild(labelled('Direct plan saves (% a year, optional)', direct));
+      ctl.appendChild(labelled('Project for (years)', years)); ctl.appendChild(labelled('Raise the SIP each year by (%)', step));
+      var refresh = function () {
+        var a = Sip.analyze(s, P.snapshots, { benchmarkRate: num(bench, 7) / 100, directDiff: direct.value === '' ? null : num(direct, 0) / 100 });
+        stats.textContent = ''; Sip.lines(a).forEach(function (l) { stats.appendChild(el('p', '', l)); });
+        var yrs = Math.min(60, Math.max(1, Math.round(num(years, 10))));
+        proj.textContent = ''; proj.appendChild(el('b', '', 'If you keep going for ' + yrs + ' years'));
+        proj.appendChild(el('p', 'hint', 'Assumed yearly returns, not predictions. Real returns vary a lot.'));
+        Sip.projections(s, a, { years: yrs, stepUp: num(step, 0) / 100 }).forEach(function (r) {
+          var d = el('div', 'row'); d.appendChild(el('span', '', 'At ' + Sip.pct1(r.rate * 100) + ' a year'));
+          d.appendChild(el('span', 't', Sip.rs(r.value) + ' (you add ' + Sip.rs(r.added) + ')')); proj.appendChild(d);
+        });
+      };
+      [bench, direct, years, step].forEach(function (i) { i.oninput = refresh; });
+      card.appendChild(stats); card.appendChild(ctl); card.appendChild(proj); refresh();
+
+      var det = el('details'); det.appendChild(el('summary', '', 'Saved values over time'));
+      Sip.growthLog(s, P.snapshots).reverse().forEach(function (g) {
+        var d = el('div', 'row'); d.appendChild(el('span', 't', Sip.shortDate(g.date) + ' ' + g.date.slice(0, 4)));
+        d.appendChild(el('span', 't', 'Value ' + Sip.rs(g.value) + ', gain ' + Sip.rs(g.gain) + pctText(g.pct) + (g.xirr === null ? '' : ', XIRR ' + Sip.pct1(g.xirr * 100)))); det.appendChild(d);
+      });
+      card.appendChild(det);
+    }
+    var del = el('button', 'small', 'Delete'), drow = el('div', 'sipbtns'); drow.appendChild(del); card.appendChild(drow);
+    del.onclick = function () {
+      if (!confirm('Delete this SIP and its saved values?')) return;
+      P.sips = P.sips.filter(function (x) { return x.id !== s.id; }); P.snapshots = P.snapshots.filter(function (x) { return x.sipId !== s.id; });
+      saveSip(); renderSip();
+    };
+    return card;
+  }
+
+  $('sipAdd').onclick = function () {
+    var pf = Sip.parseFlows($('sipFlows').value), sk = Sip.parseSkipped($('sipSkipped').value);
+    if ($('sipFlows').value.trim() && !pf.flows.length) { toast('No transaction lines could be read. Use: 2025-01-05, 2000'); return; }
+    if (sk.bad.length) { toast('Skipped months must look like 2025-03. Check: ' + sk.bad.join(', ')); return; }
+    var sip = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: $('sipName').value.trim(), amount: Number($('sipAmount').value),
+                day: Number($('sipDay').value), start: $('sipStart').value, stepUp: $('sipStep').value === '' ? 0 : Number($('sipStep').value), skipped: sk.months };
+    if (pf.flows.length) {
+      var first = pf.flows[0], last = pf.flows[pf.flows.length - 1];
+      sip.flows = pf.flows; sip.start = first.date.slice(0, 7);
+      if (!(sip.amount > 0)) sip.amount = Math.abs(last.amount);
+      if (!sip.day) sip.day = Math.min(28, Number(last.date.slice(8)));
+    }
+    var err = Sip.validate(sip); if (err) { toast(err); return; }
+    P.sips.push(sip); saveSip();
+    ['sipName', 'sipAmount', 'sipDay', 'sipStart', 'sipStep', 'sipSkipped', 'sipFlows'].forEach(function (id) { $(id).value = ''; });
+    renderSip(); toast('SIP added.' + (pf.bad ? ' ' + pf.bad + ' lines could not be read and were skipped.' : '') + ' Now type today\'s value on its card.');
+  };
+  function sipCsv() {
+    var rows = ['SIPS', 'id,name,amount,day,start,step_up_pct,skipped_months'];
+    P.sips.forEach(function (s) { rows.push([s.id, csvq(s.name), s.amount, s.day, s.start, s.stepUp || 0, csvq((s.skipped || []).join(';'))].join(',')); });
+    rows.push('', 'SIP_PAYMENTS_USED', 'sip,date,amount');
+    P.sips.forEach(function (s) { Sip.schedule(s, today()).forEach(function (f) { rows.push([s.id, f.date, f.amount].join(',')); }); });
+    rows.push('', 'SIP_VALUES', 'sip,date,value');
+    P.snapshots.forEach(function (x) { rows.push([x.sipId, x.date, x.value].join(',')); });
+    $('sipOut').value = rows.join('\n');
+  }
+  $('sipCsv').onclick = sipCsv;
+  $('sipCopy').onclick = function () { sipCsv(); var c = $('sipOut'); c.select(); try { (navigator.clipboard ? navigator.clipboard.writeText(c.value) : Promise.reject()).then(function () { toast('Copied.'); }, function () { document.execCommand('copy'); toast('Copied.'); }); } catch (e) { toast('Select the text and copy it.'); } };
+  renderSip();
+
   function askNow(text) {
     if (!RULES) return;
     $('q').value = text;
-    var a = $('answer'); a.style.display = 'block'; a.textContent = window.Ask.answer(text, { rules: RULES, state: S, now: nowIST() }).text;
+    var a = $('answer'); a.style.display = 'block'; a.textContent = window.Ask.answer(text, { rules: RULES, state: S, now: nowIST(), sipData: { sips: P.sips, snapshots: P.snapshots } }).text;
   }
   $('askGo').onclick = function () { askNow($('q').value); };
   $('q').onkeydown = function (e) { if (e.key === 'Enter') askNow($('q').value); };

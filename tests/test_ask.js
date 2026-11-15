@@ -105,4 +105,25 @@ test('works with an empty state', () => {
   const empty = ctx({ state: {} });
   ['can i trade now', 'p&l today', 'how am i doing', 'why was i blocked', 'how much can i risk'].forEach(q => ask(q, empty));
 });
+
+const sipOf = { id: 'a', name: 'Nifty index fund', amount: 1000, day: 1, start: '2025-01' };
+const sipCtx = (over) => ctx({ sipData: Object.assign({ sips: [sipOf], snapshots: [] }, over || {}) });
+test('sip: not set up yet', () => {
+  assert.ok(ask('how is my sip doing').text.includes('No SIP is set up'));
+});
+test('sip: set up but no value yet asks for the value', () => {
+  const r = ask('how is my SIP doing?', sipCtx());
+  assert.strictEqual(r.intent, 'sip'); assert.ok(r.text.includes('Nifty index fund') && r.text.includes('Type today'));
+});
+test('sip: analysis with value', () => {
+  const r = ask('what is my sip xirr', sipCtx({ snapshots: [{ sipId: 'a', date: '2025-12-31', value: 13000 }] }));
+  assert.strictEqual(r.intent, 'sip');
+  assert.ok(r.text.includes('Invested \u20B912,000 over 12 installments') && r.text.includes('gain \u20B91,000 (8.3%)') && r.text.includes('XIRR') && r.text.includes('ahead by'));
+});
+test('sip: the definition still comes from the glossary', () => {
+  assert.strictEqual(ask('what is a sip').intent, 'glossary');
+});
+test('sip questions do not disturb trading answers', () => {
+  assert.strictEqual(ask('can i trade now', sipCtx()).intent, 'can_trade');
+});
 console.log(process.exitCode ? 'some tests failed' : 'all ' + n + ' ask tests pass');

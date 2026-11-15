@@ -178,6 +178,36 @@
     return out;
   }
 
+  // Reads the file the PC tool makes. Checks every field and says what it skipped, so a bad file cannot sneak in.
+  function importData(text, newId) {
+    var out = { sips: [], snapshots: [], warnings: [], errors: [] }, data;
+    try { data = JSON.parse(text); } catch (e) { out.errors.push('That is not valid JSON. Paste the whole file the PC tool made, or choose the file.'); return out; }
+    if (!data || data.version !== 1 || !Array.isArray(data.sips)) { out.errors.push('This is not a SIP import file (expected version 1 from the PC tool).'); return out; }
+    (data.warnings || []).forEach(function (w) { out.warnings.push(String(w)); });
+    var isDate = function (d) { return typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(Date.parse(d)); };
+    data.sips.forEach(function (raw, i) {
+      raw = raw || {};
+      var label = raw.name ? String(raw.name) : 'SIP ' + (i + 1), flows = [], bad = 0;
+      (Array.isArray(raw.flows) ? raw.flows : []).forEach(function (f) {
+        if (f && isDate(f.date) && typeof f.amount === 'number' && isFinite(f.amount) && f.amount !== 0) flows.push({ date: f.date, amount: f.amount }); else bad++;
+      });
+      flows.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+      var sip = { id: newId(), name: String(raw.name || '').trim(), amount: Number(raw.amount), day: Number(raw.day),
+                  start: flows.length ? flows[0].date.slice(0, 7) : raw.start, stepUp: Number(raw.stepUp || 0),
+                  skipped: Array.isArray(raw.skipped) ? raw.skipped.filter(function (m) { return /^\d{4}-(0[1-9]|1[0-2])$/.test(m); }) : [] };
+      if (flows.length) sip.flows = flows;
+      var err = validate(sip);
+      if (err) { out.errors.push(label + ': ' + err); return; }
+      if (bad) out.warnings.push(label + ': ' + bad + ' transaction ' + (bad === 1 ? 'line was' : 'lines were') + ' invalid and skipped.');
+      out.sips.push(sip);
+      var v = raw.value;
+      if (v && isDate(v.date) && typeof v.value === 'number' && isFinite(v.value) && v.value >= 0) out.snapshots.push({ sipId: sip.id, date: v.date, value: v.value });
+      else out.warnings.push(label + ': no current value in the file. Type it in on its card.');
+    });
+    if (!out.sips.length && !out.errors.length) out.errors.push('The file has no SIPs in it.');
+    return out;
+  }
+
   // Running total of money put in, month by month, across all the flows given.
   function cumulativeByMonth(flows, asOf) {
     if (!flows.length) return [];
@@ -264,6 +294,6 @@
   return { validate: validate, parseFlows: parseFlows, parseSkipped: parseSkipped, schedule: schedule, monthlyNow: monthlyNow,
            xirr: xirr, benchmark: benchmark, costDrag: costDrag, consistency: consistency, project: project,
            analyze: analyze, projections: projections, lines: lines, growthLog: growthLog,
-           portfolio: portfolio, portfolioLines: portfolioLines, cumulativeByMonth: cumulativeByMonth, short: short, brief: brief,
+           importData: importData, portfolio: portfolio, portfolioLines: portfolioLines, cumulativeByMonth: cumulativeByMonth, short: short, brief: brief,
            monthKey: monthKey, monthLabel: monthLabel, shortDate: shortDate, rs: rs, pct1: pct1 };
 });

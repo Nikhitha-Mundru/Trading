@@ -2,3 +2,8 @@ pytest
 pandas
 matplotlib
 yfinance
+pypdf
+cryptography
+pillow
+pytesseract
+reportlab

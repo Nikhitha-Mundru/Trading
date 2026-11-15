@@ -184,4 +184,47 @@ test('short money labels and brief lines', () => {
   assert.ok(Sip.brief('Fund A', Sip.analyze(A, [snapA])).startsWith('Fund A: gain \u20B91,000 (8.3%), XIRR'));
   assert.strictEqual(Sip.brief('Fund A', { value: null }), 'Fund A: no value entered yet.');
 });
+
+// ---- importing the PC tool's file ----
+const fs = require('fs'), path = require('path');
+const mkId = () => { let k = 0; return () => 'imp' + (++k); };
+const sample = fs.readFileSync(path.join(__dirname, 'sip_import_sample.json'), 'utf8');
+test('import: the file the PC tool really makes loads cleanly', () => {
+  const r = Sip.importData(sample, mkId());
+  assert.deepStrictEqual(r.errors, []);
+  assert.deepStrictEqual(r.sips.map(s => s.name), ['Nifty 50 Index Fund - Direct Plan - Growth', 'Example Small Cap Fund - Direct Plan - Growth']);
+  const a = r.sips[0];
+  assert.deepStrictEqual([a.amount, a.day, a.start, a.flows.length], [2000, 5, '2025-01', 3]);
+  assert.deepStrictEqual(r.snapshots, [{ sipId: a.id, date: '2026-11-14', value: 13529 }]); // the second fund had no value
+  assert.ok(r.warnings.some(w => w.includes('no current value in the file')));
+  assert.ok(r.warnings.some(w => w.includes('left out 1 switch line')));
+});
+test('import: imported SIPs go straight into the analysis', () => {
+  const r = Sip.importData(sample, mkId());
+  const a = Sip.analyze(r.sips[0], r.snapshots);
+  near(a.invested, 6500); near(a.value, 13529); assert.ok(a.xirr > 0 && a.installments === 3);
+  assert.deepStrictEqual(Sip.portfolio(r.sips, r.snapshots).missing, ['Example Small Cap Fund - Direct Plan - Growth']);
+});
+test('import: not JSON, wrong shape, empty', () => {
+  assert.ok(Sip.importData('hello', mkId()).errors[0].includes('not valid JSON'));
+  assert.ok(Sip.importData('{"version":2,"sips":[]}', mkId()).errors[0].includes('not a SIP import file'));
+  assert.ok(Sip.importData('[]', mkId()).errors[0].includes('not a SIP import file'));
+  assert.ok(Sip.importData('{"version":1,"sips":[]}', mkId()).errors[0].includes('no SIPs'));
+});
+test('import: a bad SIP is reported and the good one still loads', () => {
+  const file = { version: 1, sips: [{ name: '', amount: 1000, day: 5, start: '2025-01' }, { name: 'Good', amount: 1000, day: 5, start: '2025-01', value: { date: '2025-12-31', value: 5 } }] };
+  const r = Sip.importData(JSON.stringify(file), mkId());
+  assert.strictEqual(r.sips.length, 1); assert.ok(r.errors[0].startsWith('SIP 1:'));
+});
+test('import: bad transaction lines and bad values are skipped with a warning, start follows the first transaction', () => {
+  const file = { version: 1, sips: [{ name: 'F', amount: 1000, day: 5, start: '2020-01', flows: [{ date: '2025-03-05', amount: 1000 }, { date: 'nope', amount: 5 }, { date: '2025-01-05', amount: 'x' }, { date: '2025-01-05', amount: 1000 }], value: { date: '2025-13-40', value: 3 } }] };
+  const r = Sip.importData(JSON.stringify(file), mkId());
+  assert.deepStrictEqual(r.sips[0].flows.map(f => f.date), ['2025-01-05', '2025-03-05']); assert.strictEqual(r.sips[0].start, '2025-01');
+  assert.ok(r.warnings.some(w => w.includes('2 transaction lines were invalid')) && r.warnings.some(w => w.includes('no current value')));
+  assert.strictEqual(r.snapshots.length, 0);
+});
+test('import: ids are unique per SIP and snapshots point at them', () => {
+  const r = Sip.importData(sample, mkId());
+  assert.notStrictEqual(r.sips[0].id, r.sips[1].id); assert.strictEqual(r.snapshots[0].sipId, r.sips[0].id);
+});
 console.log(process.exitCode ? 'some tests failed' : 'all ' + n + ' sip tests pass');

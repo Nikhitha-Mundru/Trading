@@ -177,6 +177,15 @@ details summary{cursor:pointer;min-height:40px;display:flex;align-items:center}
       <p class="hint">Pasted lines give the most accurate result. One per line: date, then amount. Dates like 2025-01-05 or 05-01-2025 both work.</p>
       <button class="main" id="sipAdd">Add SIP</button>
     </div>
+    <h2>Import from a statement</h2>
+    <div class="card">
+      <p class="hint">Run the PC tool on your fund statement PDF (steps in docs/SIP_IMPORT.md). It makes a file called sip_import.json. Choose that file here, or paste its text. You see a preview before anything is added.</p>
+      <input type="file" id="impFile" accept=".json,application/json,text/plain" aria-label="Choose the import file">
+      <label for="impText">Or paste its text</label>
+      <textarea id="impText" aria-label="Import file text"></textarea>
+      <button class="main" id="impGo">Preview</button>
+      <div id="impPreview"></div>
+    </div>
     <h2>Export</h2>
     <div class="card">
       <button class="small" id="sipCsv">Build CSV</button>
@@ -478,6 +487,40 @@ details summary{cursor:pointer;min-height:40px;display:flex;align-items:center}
     P.sips.push(sip); saveSip();
     ['sipName', 'sipAmount', 'sipDay', 'sipStart', 'sipStep', 'sipSkipped', 'sipFlows'].forEach(function (id) { $(id).value = ''; });
     renderSip(); toast('SIP added.' + (pf.bad ? ' ' + pf.bad + ' lines could not be read and were skipped.' : '') + ' Now type today\'s value on its card.');
+  };
+  function newSipId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
+  function impPreview() {
+    var box = $('impPreview'); box.textContent = '';
+    if (!$('impText').value.trim()) { box.appendChild(el('p', 'hint', 'Choose the file or paste its text first.')); return; }
+    var r = Sip.importData($('impText').value, newSipId);
+    r.errors.forEach(function (e) { box.appendChild(el('p', 'neg', e)); });
+    r.warnings.forEach(function (w) { box.appendChild(el('p', /^CHECK/.test(w) ? 'neg' : 'hint', w)); });
+    if (!r.sips.length) return;
+    r.sips.forEach(function (s) {
+      var snap = r.snapshots.filter(function (x) { return x.sipId === s.id; })[0], dup = P.sips.some(function (x) { return x.name.toLowerCase() === s.name.toLowerCase(); });
+      var row = el('div', 'row'), left = el('div');
+      left.appendChild(el('b', '', s.name));
+      left.appendChild(el('div', 'hint', (s.flows ? s.flows.length + ' transactions, invested ' + Sip.rs(s.flows.reduce(function (a, f) { return a + f.amount; }, 0)) : Sip.rs(s.amount) + ' a month from ' + Sip.monthLabel(s.start))
+        + (snap ? ', value ' + Sip.rs(snap.value) + ' on ' + Sip.shortDate(snap.date) : ', no value yet') + (dup ? '. Already added: it will be skipped.' : '')));
+      row.appendChild(left); box.appendChild(row);
+    });
+    var go = el('button', 'main', 'Import ' + r.sips.length + (r.sips.length === 1 ? ' SIP' : ' SIPs'));
+    go.onclick = function () {
+      var added = 0, skipped = 0;
+      r.sips.forEach(function (s) {
+        if (P.sips.some(function (x) { return x.name.toLowerCase() === s.name.toLowerCase(); })) { skipped++; return; }
+        P.sips.push(s); added++;
+        r.snapshots.filter(function (x) { return x.sipId === s.id; }).forEach(function (x) { P.snapshots.push(x); });
+      });
+      saveSip(); $('impText').value = ''; $('impFile').value = ''; box.textContent = ''; renderSip();
+      toast('Imported ' + added + (added === 1 ? ' SIP' : ' SIPs') + (skipped ? ', skipped ' + skipped + ' already added' : '') + '.');
+    };
+    box.appendChild(go);
+  }
+  $('impGo').onclick = impPreview;
+  $('impFile').onchange = function () {
+    var f = this.files && this.files[0]; if (!f) return;
+    var rd = new FileReader(); rd.onload = function () { $('impText').value = rd.result; impPreview(); }; rd.readAsText(f);
   };
   function sipCsv() {
     var rows = ['SIPS', 'id,name,amount,day,start,step_up_pct,skipped_months'];

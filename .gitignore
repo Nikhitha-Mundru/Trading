@@ -1,2 +1,7 @@
 __pycache__/
 .pytest_cache/
+
+# Personal financial data: never commit these
+statements/
+*.pdf
+journal/sip_import.json

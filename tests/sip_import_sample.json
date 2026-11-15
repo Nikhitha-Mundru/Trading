@@ -1,0 +1,62 @@
+{
+ "version": 1,
+ "source_files": [
+  "statement.txt"
+ ],
+ "sips": [
+  {
+   "name": "Nifty 50 Index Fund - Direct Plan - Growth",
+   "amount": 2000,
+   "day": 5,
+   "start": "2025-01",
+   "stepUp": 0,
+   "skipped": [],
+   "flows": [
+    {
+     "date": "2025-01-05",
+     "amount": 2000.0
+    },
+    {
+     "date": "2025-02-05",
+     "amount": 2000.0
+    },
+    {
+     "date": "2025-04-05",
+     "amount": 2500.0
+    }
+   ],
+   "value": {
+    "date": "2026-11-14",
+    "value": 13529.0
+   }
+  },
+  {
+   "name": "Example Small Cap Fund - Direct Plan - Growth",
+   "amount": 1000,
+   "day": 28,
+   "start": "2025-06",
+   "stepUp": 0,
+   "skipped": [],
+   "flows": [
+    {
+     "date": "2025-06-30",
+     "amount": 1000.0
+    },
+    {
+     "date": "2025-07-30",
+     "amount": 1000.0
+    },
+    {
+     "date": "2025-08-30",
+     "amount": 1000.0
+    }
+   ]
+  }
+ ],
+ "warnings": [
+  "Nifty 50 Index Fund - Direct Plan - Growth: left out 1 switch line (not new money from you).",
+  "Nifty 50 Index Fund - Direct Plan - Growth: left out 1 dividend line (not new money from you).",
+  "Example Flexi Cap Fund - Regular Plan - Growth: fully redeemed (value 0), skipped. Use --include-closed to keep it.",
+  "Example Small Cap Fund - Direct Plan - Growth: no closing value found in the statement. Type today's value on its card."
+ ]
+}
